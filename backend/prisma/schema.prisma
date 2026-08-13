@@ -1,0 +1,283 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                String             @id @default(uuid())
+  email             String             @unique
+  passwordHash      String
+  name              String
+  role              String             // DRIVER, MECHANIC, MAINTENANCE_ADMIN, FLEET_MANAGER
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  inspections       EDVIRInspection[]
+  serviceRequests   ServiceRequest[]
+  assignedWorkOrders WorkOrder[]        @relation("AssignedMechanic")
+  emergencyTickets  EmergencyTicket[]  @relation("Reporter")
+  accidentClaims    AccidentClaim[]
+  auditLogs         AuditLog[]
+}
+
+model Asset {
+  id                String             @id @default(uuid())
+  type              String             // TRACTOR, TRAILER
+  name              String             // e.g. "Tractor #101"
+  vin               String             @unique
+  plateNumber       String
+  status            String             @default("OPERABLE") // OPERABLE, NEEDS_ATTENTION, INOPERABLE
+  odometer          Float              @default(0.0)
+  fuelType          String             @default("Diesel")
+  qrCodeUrl         String?
+  parentAssetId     String?
+  parentAsset       Asset?             @relation("TractorTrailer", fields: [parentAssetId], references: [id])
+  childAssets       Asset[]            @relation("TractorTrailer")
+  components        Component[]
+  inspections       EDVIRInspection[]
+  pmSchedules       PMSchedule[]
+  serviceRequests   ServiceRequest[]
+  workOrders        WorkOrder[]
+  renewalAlerts     RenewalAlert[]
+  fuelLogs          FuelLog[]
+  tollRecords       TollRecord[]
+  dotInspections    DOTInspection[]
+  emergencyTickets  EmergencyTicket[]
+  faultCodes        FaultCode[]
+  accidentClaims    AccidentClaim[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model Component {
+  id              String        @id @default(uuid())
+  assetId         String
+  asset           Asset         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  name            String        // e.g. "Engine", "Fuel System", "Electrical", "Tyres", "Axles", "Kingpin"
+  status          String        @default("OPERABLE") // OPERABLE, NEEDS_ATTENTION, INOPERABLE
+  lastServiceDate DateTime?
+  qrCodeUrl       String?
+  workOrders      WorkOrder[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model EDVIRInspection {
+  id            String           @id @default(uuid())
+  assetId       String
+  asset         Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  driverId      String
+  driver        User             @relation(fields: [driverId], references: [id])
+  status        String           // PASSED, FAILED
+  odometer      Float
+  checklistJson String           // JSON string representing check statuses
+  notes         String?
+  createdAt     DateTime         @default(now())
+}
+
+model PMTemplate {
+  id              String        @id @default(uuid())
+  name            String        // e.g. "PM-A Dry Service"
+  description     String
+  triggerMileage  Float         // Trigger interval in miles (e.g. 10000)
+  triggerDays     Int           // Trigger interval in days (e.g. 90)
+  stepsJson       String        // JSON array of strings (task checklist)
+  pmSchedules     PMSchedule[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model PMSchedule {
+  id                  String        @id @default(uuid())
+  assetId             String
+  asset               Asset         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  templateId          String
+  template            PMTemplate    @relation(fields: [templateId], references: [id])
+  lastServiceOdometer Float         @default(0.0)
+  lastServiceDate     DateTime      @default(now())
+  nextDueOdometer     Float
+  nextDueDate         DateTime
+  status              String        @default("COMPLIANT") // COMPLIANT, DUE, OVERDUE
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+}
+
+model ServiceRequest {
+  id          String        @id @default(uuid())
+  assetId     String
+  asset       Asset         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  driverId    String
+  driver      User          @relation(fields: [driverId], references: [id])
+  description String
+  mediaUrls   String        // JSON array of strings: photos/videos URLs
+  status      String        @default("PENDING") // PENDING, APPROVED, REJECTED
+  workOrder   WorkOrder?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model WorkOrder {
+  id                  String             @id @default(uuid())
+  serviceRequestId    String?            @unique
+  serviceRequest      ServiceRequest?    @relation(fields: [serviceRequestId], references: [id])
+  assetId             String
+  asset               Asset              @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  componentId         String?
+  component           Component?         @relation(fields: [componentId], references: [id])
+  assignedMechanicId  String?
+  assignedMechanic    User?              @relation("AssignedMechanic", fields: [assignedMechanicId], references: [id])
+  type                String             @default("INTERNAL") // INTERNAL, EXTERNAL
+  vendorId            String?
+  vendor              Vendor?            @relation(fields: [vendorId], references: [id])
+  status              String             @default("OPEN") // OPEN, IN_PROGRESS, COMPLETED
+  priority            String             @default("MEDIUM") // LOW, MEDIUM, HIGH, EMERGENCY
+  description         String
+  laborCost           Float              @default(0.0)
+  partsCost           Float              @default(0.0)
+  totalCost           Float              @default(0.0)
+  dotViolationId      String?            // Reference if triggered by DOT violation
+  dotInspection       DOTInspection?     @relation("DOTViolationWO", fields: [dotViolationId], references: [id])
+  purchaseOrder       PurchaseOrder?
+  faultCodes          FaultCode[]
+  completedAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model PurchaseOrder {
+  id          String              @id @default(uuid())
+  workOrderId String              @unique
+  workOrder   WorkOrder           @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  vendorId    String
+  vendor      Vendor              @relation(fields: [vendorId], references: [id])
+  amount      Float
+  status      String              @default("PENDING") // PENDING, APPROVED, PAID
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+model RenewalAlert {
+  id            String        @id @default(uuid())
+  assetId       String
+  asset         Asset         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  type          String        // DOT_ANNUAL_INSPECTION, IRP_REGISTRATION, INSURANCE_POLICY
+  description   String
+  expiryDate    DateTime
+  status        String        @default("ACTIVE") // ACTIVE, DISMISSED, EXPIRED
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model FuelLog {
+  id                 String   @id @default(uuid())
+  assetId            String
+  asset              Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  cardTransactionId  String   @unique
+  gallons            Float
+  cost               Float
+  location           String   // Jurisdiction, e.g. "TX", "CA"
+  odometer           Float
+  mpg                Float
+  isAnomaly          Boolean  @default(false)
+  createdAt          DateTime @default(now())
+}
+
+model TollRecord {
+  id            String   @id @default(uuid())
+  assetId       String
+  asset         Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  transponderId String
+  amount        Float
+  location      String
+  timestamp     DateTime
+  createdAt     DateTime @default(now())
+}
+
+model DOTInspection {
+  id              String      @id @default(uuid())
+  assetId         String
+  asset           Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  inspectionDate  DateTime
+  result          String      // e.g. "CLEAN" or "VIOLATION"
+  violationsJson  String      // JSON string details of violations
+  workOrders      WorkOrder[] @relation("DOTViolationWO")
+  createdAt       DateTime    @default(now())
+}
+
+model Vendor {
+  id              String          @id @default(uuid())
+  name            String
+  type            String          // HEAVY_DUTY_SHOP, TYRE_SPECIALIST, MOBILE_ROADSIDE_SERVICE, INDEPENDENT_MECHANIC, DOT_INSPECTOR
+  negotiatedRate  Float
+  contactInfo     String
+  invoiceHistory  String          // JSON array of past invoices
+  workOrders      WorkOrder[]
+  purchaseOrders  PurchaseOrder[]
+  emergencyTickets EmergencyTicket[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model EmergencyTicket {
+  id               String          @id @default(uuid())
+  assetId          String
+  asset            Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  reporterId       String
+  reporter         User            @relation("Reporter", fields: [reporterId], references: [id])
+  description      String
+  gpsLatitude      Float
+  gpsLongitude     Float
+  status           String          @default("OPEN") // OPEN, DISPATCHED, COMPLETED
+  assignedVendorId String?
+  assignedVendor   Vendor?         @relation(fields: [assignedVendorId], references: [id])
+  mechanicEta      DateTime?
+  downtimeHours    Float           @default(0.0)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+model FaultCode {
+  id          String      @id @default(uuid())
+  assetId     String
+  asset       Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  source      String      // Motive, Samsara, Geotab
+  code        String      // DTC/J1939 fault code
+  description String
+  status      String      @default("ACTIVE") // ACTIVE, RESOLVED
+  workOrderId String?
+  workOrder   WorkOrder?  @relation(fields: [workOrderId], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model AccidentClaim {
+  id                 String      @id @default(uuid())
+  assetId            String
+  asset              Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  driverId           String
+  driver             User        @relation(fields: [driverId], references: [id])
+  policeReportNumber String
+  statement          String
+  thirdPartyDetails  String
+  insurancePayout    Float       @default(0.0)
+  actualRepairCost   Float       @default(0.0)
+  status             String      @default("OPEN") // OPEN, SETTLED
+  claimDate          DateTime
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+}
+
+model AuditLog {
+  id              String   @id @default(uuid())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id])
+  action          String   // e.g. "CREATE", "UPDATE", "DELETE", "OVERRIDE"
+  entityName      String   // e.g. "Asset", "WorkOrder"
+  entityId        String
+  beforeStateJson String?
+  afterStateJson  String?
+  timestamp       DateTime @default(now())
+}
