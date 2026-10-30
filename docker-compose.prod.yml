@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  fleet-backend:
+    container_name: fleet-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8030:8030"
+    environment:
+      - PORT=8030
+      - DATABASE_URL=file:./dev.db
+      - JWT_SECRET=super-secret-key-fleet-management-app
+      - RELAY_API_KEY=iak_FHR64MTgWf5oqyLdLcZtXQ4emvbueTTFNEnTbA9LJphB
+      - RELAY_BASE_URL=https://staging.relaypayments.com/api/integrations
+      - RELAY_TXN_URL=https://staging.relaypayments.com/api
+    volumes:
+      - ./backend/prisma:/app/prisma
+      - ./backend/uploads:/app/uploads
+    networks:
+      - fleet-network
+
+  fleet-frontend:
+    container_name: fleet-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=https://api.fleet.supertruck.ai/api
+    restart: unless-stopped
+    ports:
+      - "3030:3030"
+    environment:
+      - PORT=3030
+      - NEXT_PUBLIC_API_URL=https://api.fleet.supertruck.ai/api
+    depends_on:
+      - fleet-backend
+    networks:
+      - fleet-network
+
+networks:
+  fleet-network:
+    driver: bridge

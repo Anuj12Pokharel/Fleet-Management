@@ -1,6 +1,7 @@
 'use client';
 import React, { useState } from 'react';
-import { VehicleAssignment, Asset, User as DbUser, getStore, setStore, initialAssignments } from '../mockDb';
+import { VehicleAssignment, Asset, User as DbUser } from '../mockDb';
+import { apiCreateAssignment, apiUpdateAssignment } from '../lib/api-client';
 import { Plus, CheckCircle, XCircle, Clock } from 'lucide-react';
 
 interface Props {
@@ -33,28 +34,28 @@ export default function Assignments({ assignments, assets, users, currentUser, o
     ? displayed.filter(a => a.driverId === currentUser.id)
     : displayed;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.assetId || !form.driverId || !form.startDate) {
       alert('Asset, driver, and start date are required.');
       return;
     }
     const driver = users.find(u => u.id === form.driverId);
-    const newA: VehicleAssignment = {
-      id: 'va-' + Math.random().toString(36).substr(2, 8),
-      assetId: form.assetId,
-      driverId: form.driverId,
-      driverName: driver?.name || 'Unknown',
-      startDate: form.startDate,
-      endDate: form.endDate || null,
-      notes: form.notes,
-      status: 'ACTIVE'
-    };
-    const all = getStore('assignments', initialAssignments);
-    all.unshift(newA);
-    setStore('assignments', all);
-    setShowForm(false);
-    setForm({ assetId: '', driverId: '', startDate: '', endDate: '', notes: '' });
-    onRefresh();
+    try {
+      await apiCreateAssignment({
+        assetId: form.assetId,
+        driverId: form.driverId,
+        driverName: driver?.name || 'Unknown',
+        startDate: form.startDate,
+        endDate: form.endDate || null,
+        notes: form.notes,
+        status: 'ACTIVE'
+      });
+      setShowForm(false);
+      setForm({ assetId: '', driverId: '', startDate: '', endDate: '', notes: '' });
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Failed to create vehicle assignment in database.');
+    }
   };
 
   return (
@@ -63,14 +64,14 @@ export default function Assignments({ assignments, assets, users, currentUser, o
         <div className="flex gap-2">
           {(['ACTIVE', 'HISTORY'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition ${tab === t ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition ${tab === t ? 'bg-[#00BA7C] text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
               {t === 'ACTIVE' ? 'Active Assignments' : 'History'}
             </button>
           ))}
         </div>
         {canManage && (
           <button onClick={() => setShowForm(!showForm)}
-            className="flex items-center gap-2 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white transition shadow-sm">
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-[#00BA7C] hover:bg-[#00BA7C] rounded-xl text-xs font-bold text-white transition shadow-sm">
             <Plus className="h-3.5 w-3.5" /> Assign Driver
           </button>
         )}
@@ -83,7 +84,7 @@ export default function Assignments({ assignments, assets, users, currentUser, o
             <div>
               <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Asset</label>
               <select value={form.assetId} onChange={e => setForm(f => ({ ...f, assetId: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium">
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#00BA7C] font-medium">
                 <option value="">Select asset...</option>
                 {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
@@ -91,7 +92,7 @@ export default function Assignments({ assignments, assets, users, currentUser, o
             <div>
               <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Driver</label>
               <select value={form.driverId} onChange={e => setForm(f => ({ ...f, driverId: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium">
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#00BA7C] font-medium">
                 <option value="">Select driver...</option>
                 {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
@@ -99,23 +100,23 @@ export default function Assignments({ assignments, assets, users, currentUser, o
             <div>
               <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Start Date</label>
               <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium" />
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#00BA7C] font-medium" />
             </div>
             <div>
               <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">End Date (optional)</label>
               <input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium" />
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#00BA7C] font-medium" />
             </div>
             <div className="md:col-span-2">
               <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Notes</label>
               <input type="text" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                 placeholder="Route details, shift info..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium" />
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#00BA7C] font-medium" />
             </div>
           </div>
           <div className="flex gap-2 justify-end">
             <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-semibold text-slate-700 transition">Cancel</button>
-            <button onClick={handleSubmit} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white transition shadow-sm">Create Assignment</button>
+            <button onClick={handleSubmit} className="px-4 py-2 bg-[#00BA7C] hover:bg-[#00BA7C] rounded-xl text-xs font-bold text-white transition shadow-sm">Create Assignment</button>
           </div>
         </div>
       )}
@@ -129,8 +130,8 @@ export default function Assignments({ assignments, assets, users, currentUser, o
             return (
               <div key={a.id} className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center">
-                    <span className="text-indigo-600 text-xs font-bold">{asset?.type === 'TRACTOR' ? '🚛' : '📦'}</span>
+                  <div className="h-10 w-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center">
+                    <span className="text-[#00BA7C] text-xs font-bold">{asset?.type === 'TRACTOR' ? '🚛' : '📦'}</span>
                   </div>
                   <div>
                     <p className="text-sm font-extrabold text-slate-900">{asset?.name || a.assetId}</p>
@@ -155,11 +156,13 @@ export default function Assignments({ assignments, assets, users, currentUser, o
                   </div>
                   {canManage && a.status === 'ACTIVE' && (
                     <button
-                      onClick={() => {
-                        const all = getStore('assignments', initialAssignments);
-                        const updated = all.map(x => x.id === a.id ? { ...x, status: 'COMPLETED' as const } : x);
-                        setStore('assignments', updated);
-                        onRefresh();
+                      onClick={async () => {
+                        try {
+                          await apiUpdateAssignment(a.id, { status: 'COMPLETED' });
+                          onRefresh();
+                        } catch (err: any) {
+                          alert(err.message || 'Failed to update assignment in database.');
+                        }
                       }}
                       className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-[10px] font-bold rounded-lg transition"
                     >

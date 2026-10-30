@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { PrismaService } from '../prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -6,6 +7,8 @@ import { Roles } from '../auth/roles.decorator';
 import { Role, WorkOrderStatus, WorkOrderPriority, WorkOrderType, AssetStatus } from '../enums';
 import { NotificationsService } from '../notifications/notifications.service';
 
+@ApiTags('DOT')
+@ApiBearerAuth('JWT-Auth')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('api/dot')
 export class DotController {
@@ -15,6 +18,8 @@ export class DotController {
   ) {}
 
   @Get()
+  @ApiOperation({ summary: 'List roadside DOT inspections', description: 'Returns Level 1-5 roadside inspections, violation citations, and linked repair work orders.' })
+  @ApiResponse({ status: 200, description: 'DOT inspections list.' })
   async getDotInspections() {
     const list = await this.prisma.dOTInspection.findMany({
       include: {
@@ -31,6 +36,20 @@ export class DotController {
 
   @Roles(Role.MAINTENANCE_ADMIN, Role.FLEET_MANAGER)
   @Post()
+  @ApiOperation({ summary: 'Log roadside DOT inspection', description: 'Records official DOT inspection. Violations automatically switch asset to INOPERABLE and auto-generate urgent work order.' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['assetId', 'inspectionDate', 'result', 'violationsJson'],
+      properties: {
+        assetId: { type: 'string', example: 'asset_123' },
+        inspectionDate: { type: 'string', format: 'date-time', example: '2026-10-29T11:00:00Z' },
+        result: { type: 'string', enum: ['CLEAN', 'VIOLATION'], example: 'CLEAN' },
+        violationsJson: { type: 'array', items: { type: 'string' }, example: ['393.45(a) - Brake tubing chaffing'] },
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Inspection recorded.' })
   async createDotInspection(
     @Body('assetId') assetId: string,
     @Body('inspectionDate') inspectionDate: string,

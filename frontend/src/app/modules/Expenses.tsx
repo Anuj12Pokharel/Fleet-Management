@@ -1,6 +1,7 @@
 'use client';
 import React, { useState } from 'react';
-import { ExpenseRecord, Asset, User as DbUser, getStore, setStore, initialExpenseRecords } from '../mockDb';
+import { ExpenseRecord, Asset, User as DbUser } from '../mockDb';
+import { apiCreateExpense } from '../lib/api-client';
 import { Plus, DollarSign, TrendingUp } from 'lucide-react';
 
 interface Props {
@@ -37,22 +38,22 @@ export default function Expenses({ expenseRecords, assets, currentUser, onRefres
 
   const maxCat = Math.max(...Object.values(byCategory), 1);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.amount || !form.description) { alert('Amount and description are required.'); return; }
-    const newExp: ExpenseRecord = {
-      id: 'ex-' + Math.random().toString(36).substr(2, 8),
-      assetId: form.assetId,
-      category: form.category,
-      amount: parseFloat(form.amount),
-      description: form.description,
-      date: form.date,
-      linkedWoId: null
-    };
-    const all = getStore('expenseRecords', initialExpenseRecords);
-    all.unshift(newExp);
-    setStore('expenseRecords', all);
-    setShowForm(false);
-    onRefresh();
+    try {
+      await apiCreateExpense({
+        assetId: form.assetId,
+        category: form.category,
+        amount: parseFloat(form.amount),
+        description: form.description,
+        date: form.date,
+        linkedWoId: null
+      });
+      setShowForm(false);
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Failed to save expense to database.');
+    }
   };
 
   return (
@@ -89,14 +90,14 @@ export default function Expenses({ expenseRecords, assets, currentUser, onRefres
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <select value={selectedAsset} onChange={e => setSelectedAsset(e.target.value)}
-            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 shadow-xs">
+            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:outline-none focus:border-[#00BA7C] shadow-xs">
             <option value="ALL">All Assets</option>
             {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         </div>
         {canAdd && (
           <button onClick={() => setShowForm(!showForm)}
-            className="flex items-center gap-2 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white transition shadow-sm">
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-[#00BA7C] hover:bg-[#00BA7C] rounded-xl text-xs font-bold text-white transition shadow-sm">
             <Plus className="h-3.5 w-3.5" /> Add Expense
           </button>
         )}
@@ -109,14 +110,14 @@ export default function Expenses({ expenseRecords, assets, currentUser, onRefres
             <div>
               <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Asset</label>
               <select value={form.assetId} onChange={e => setForm(f => ({ ...f, assetId: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium">
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-[#00BA7C] font-medium">
                 {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>
             <div>
               <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Category</label>
               <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as any }))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium">
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-[#00BA7C] font-medium">
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -124,23 +125,23 @@ export default function Expenses({ expenseRecords, assets, currentUser, onRefres
               <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Amount ($)</label>
               <input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
                 placeholder="0.00"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium" />
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-[#00BA7C] font-medium" />
             </div>
             <div>
               <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Date</label>
               <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium" />
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-[#00BA7C] font-medium" />
             </div>
             <div className="col-span-2 md:col-span-4">
               <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Description</label>
               <input type="text" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 placeholder="Expense details..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium" />
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-[#00BA7C] font-medium" />
             </div>
           </div>
           <div className="flex gap-2 justify-end">
             <button onClick={() => setShowForm(false)} className="px-3 py-1.5 bg-slate-100 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-200">Cancel</button>
-            <button onClick={handleSubmit} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white shadow-sm">Save Expense</button>
+            <button onClick={handleSubmit} className="px-3 py-1.5 bg-[#00BA7C] hover:bg-[#00BA7C] rounded-xl text-xs font-bold text-white shadow-sm">Save Expense</button>
           </div>
         </div>
       )}
@@ -177,22 +178,30 @@ export default function Expenses({ expenseRecords, assets, currentUser, onRefres
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(e => {
-                const asset = assets.find(a => a.id === e.assetId);
-                return (
-                  <tr key={e.id} className="text-slate-800 hover:bg-slate-50">
-                    <td className="py-2 pr-4 text-slate-500 font-medium">{e.date}</td>
-                    <td className="py-2 pr-4 text-slate-800 font-bold text-[10px]">{asset?.name || e.assetId}</td>
-                    <td className="py-2 pr-4">
-                      <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                        {e.category}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-4 text-slate-600 font-medium">{e.description}</td>
-                    <td className="py-2 text-right font-extrabold text-slate-900">${e.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                  </tr>
-                );
-              })}
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-400 font-medium text-xs">
+                    No expense records found. Click &quot;+ Add Expense&quot; above to log a new expense.
+                  </td>
+                </tr>
+              ) : (
+                filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(e => {
+                  const asset = assets.find(a => a.id === e.assetId);
+                  return (
+                    <tr key={e.id} className="text-slate-800 hover:bg-slate-50">
+                      <td className="py-2 pr-4 text-slate-500 font-medium">{e.date}</td>
+                      <td className="py-2 pr-4 text-slate-800 font-bold text-[10px]">{asset?.name || e.assetId}</td>
+                      <td className="py-2 pr-4">
+                        <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                          {e.category}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-4 text-slate-600 font-medium">{e.description}</td>
+                      <td className="py-2 text-right font-extrabold text-slate-900">${e.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

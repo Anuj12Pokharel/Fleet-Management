@@ -1,10 +1,13 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { PrismaService } from '../prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '../enums';
 
+@ApiTags('Audit')
+@ApiBearerAuth('JWT-Auth')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('api/audit-logs')
 export class AuditController {
@@ -12,6 +15,8 @@ export class AuditController {
 
   @Roles(Role.MAINTENANCE_ADMIN, Role.FLEET_MANAGER)
   @Get()
+  @ApiOperation({ summary: 'List system audit trails', description: 'Returns immutable audit log entries with before/after state diffs for regulatory compliance.' })
+  @ApiResponse({ status: 200, description: 'Audit log entries returned.' })
   async getAuditLogs() {
     const list = await this.prisma.auditLog.findMany({
       include: {

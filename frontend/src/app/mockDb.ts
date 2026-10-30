@@ -105,6 +105,40 @@ export interface RenewalAlert {
   status: 'ACTIVE' | 'DISMISSED' | 'EXPIRED';
 }
 
+export interface ComplianceRenewal {
+  id: string;
+  scope: 'DRIVER' | 'EQUIPMENT' | 'CARRIER';
+  type: string;
+  title: string;
+  description?: string | null;
+  driverId?: string | null;
+  driverName?: string | null;
+  assetId?: string | null;
+  assetName?: string | null;
+  issueDate?: string | null;
+  expiryDate?: string | null;
+  alertLeadDays: number;
+  targetMileage?: number | null;
+  lastRecordedDate?: string | null;
+  referenceNumber?: string | null;
+  documentUrl?: string | null;
+  notes?: string | null;
+  metadataJson?: string | null;
+  enteredById: string;
+  enteredByName: string;
+  enteredByRole: string;
+  lastModifiedById?: string | null;
+  lastModifiedByName?: string | null;
+  lastModifiedByRole?: string | null;
+  verificationStatus: 'ACTIVE' | 'PENDING_VERIFICATION' | 'VERIFIED' | 'REJECTED' | 'SELF_CERTIFIED';
+  verifiedById?: string | null;
+  verifiedByName?: string | null;
+  verifiedAt?: string | null;
+  rejectionReason?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface FuelLog {
   id: string;
   assetId: string;
@@ -225,6 +259,19 @@ export interface TireReading {
   recordedBy: string;
 }
 
+export interface BrakeReading {
+  id: string;
+  assetId: string;
+  axlePosition: 'STEER_LEFT' | 'STEER_RIGHT' | 'DRIVE1_LEFT' | 'DRIVE1_RIGHT' | 'DRIVE2_LEFT' | 'DRIVE2_RIGHT' | 'TRAILER_LEFT' | 'TRAILER_RIGHT';
+  brakeType: 'DRUM' | 'DISC';
+  liningThickness: number; // in 32nds of an inch (min legal: 8/32" steer, 4/32" drive/trailer)
+  pushrodStroke: number; // in inches (max legal: 2.0" for standard chamber)
+  drumCondition: 'GOOD' | 'HEAT_CHECKED' | 'SCORED' | 'CRACKED';
+  brakeTemp?: number; // degrees F
+  recordedAt: string;
+  recordedBy: string;
+}
+
 export interface ExpenseRecord {
   id: string;
   assetId: string;
@@ -318,189 +365,631 @@ export interface Warranty {
   status: 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' | 'CLAIMED';
 }
 
-// Initial Mock Data
+// ── Configuration & Domain Settings Interfaces ──────────────────────────────
 
-export const initialUsers: User[] = [
-  { id: 'u1', email: 'admin@fleet.com', name: 'John Admin', role: 'MAINTENANCE_ADMIN' },
-  { id: 'u2', email: 'manager@fleet.com', name: 'Sarah Manager', role: 'FLEET_MANAGER' },
-  { id: 'u3', email: 'mechanic@fleet.com', name: 'Dave Mechanic', role: 'MECHANIC' },
-  { id: 'u4', email: 'driver@fleet.com', name: 'Bob Driver', role: 'DRIVER' }
+export interface BillingProfile {
+  orgName: string;
+  contactName: string;
+  email: string;
+  taxId: string;
+  address: string;
+  paymentMethod: string;
+}
+
+export interface PrimaryPlan {
+  planName: string;
+  billingCycle: string;
+  status: 'TRIAL_ENDED' | 'ACTIVE' | 'PAST_DUE';
+  currentVehicles: number;
+  maxVehicles: number;
+  pricePerVehicle: number;
+}
+
+export interface GeneralSettingsConfig {
+  companyName: string;
+  logoUrl: string;
+  timezone: string;
+  dateFormat: string;
+  baseCurrency: string;
+  unitSystem: 'IMPERIAL' | 'METRIC';
+}
+
+export interface VehicleStatusConfig {
+  id: string;
+  name: string;
+  color: string;
+  type: 'OPERABLE' | 'NEEDS_ATTENTION' | 'INOPERABLE' | 'IN_SHOP' | 'ARCHIVED';
+  description: string;
+}
+
+export interface VehicleTypeConfig {
+  id: string;
+  name: string;
+  category: 'TRUCK' | 'TRAILER' | 'VAN' | 'EQUIPMENT' | 'OTHER';
+  fuelType: string;
+  description: string;
+  expectedLifeMiles: number;
+}
+
+export interface ExternalVehicleIdConfig {
+  id: string;
+  assetId: string;
+  systemName: string;
+  externalId: string;
+  notes: string;
+}
+
+export interface ExpenseSettingsConfig {
+  currency: string;
+  taxInclusive: boolean;
+  approvalThreshold: number;
+  requireReceipt: boolean;
+}
+
+export interface InspectionSettingsConfig {
+  requirePhotoOnFailure: boolean;
+  requireDigitalSignature: boolean;
+  autoCreateWorkOrder: boolean;
+  gracePeriodDays: number;
+}
+
+export interface IssuePriorityConfig {
+  id: string;
+  name: string;
+  slaHours: number;
+  color: string;
+  autoEscalate: boolean;
+}
+
+export interface FaultRuleConfig {
+  id: string;
+  source: string;
+  codePattern: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  action: 'AUTO_WORK_ORDER' | 'NOTIFY_ONLY' | 'CREATE_ISSUE' | 'IGNORE';
+  enabled: boolean;
+}
+
+export interface ReminderSettingsConfig {
+  leadDistanceMiles: number;
+  leadTimeDays: number;
+  snoozeLimitDays: number;
+  emailAlerts: boolean;
+}
+
+export interface RenewalTypeConfig {
+  id: string;
+  name: string;
+  target: 'VEHICLE' | 'CONTACT';
+  defaultLeadDays: number;
+  requiredDocs: string;
+}
+
+export interface MaintenanceSettingsConfig {
+  defaultLaborRate: number;
+  partsMarkupPercent: number;
+  woNumberPrefix: string;
+  requirePoThreshold: number;
+}
+
+export interface ReasonForRepairCode {
+  id: string;
+  code: string;
+  description: string;
+  category: 'SCHEDULED' | 'UNSCHEDULED' | 'ACCIDENT' | 'BREAKDOWN' | 'RECALL';
+}
+
+export interface RepairPriorityClassCode {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+}
+
+export interface VmrsCode {
+  id: string;
+  systemCode: string;
+  systemName: string;
+  assemblyCode: string;
+  assemblyName: string;
+  componentCode: string;
+  componentName: string;
+}
+
+export interface SmartAssessmentConfig {
+  aiAuditEnabled: boolean;
+  laborBenchmarkTolerancePercent: number;
+  partsMarkupAlertThreshold: number;
+}
+
+export interface PartLocationConfig {
+  id: string;
+  name: string;
+  type: 'WAREHOUSE' | 'SHOP_BIN' | 'MOBILE_TRUCK' | 'DEPOT';
+  address: string;
+  capacity: number;
+}
+
+export interface PartCategoryConfig {
+  id: string;
+  name: string;
+  code: string;
+  description: string;
+}
+
+export interface PartManufacturerConfig {
+  id: string;
+  name: string;
+  country: string;
+  contactInfo: string;
+  isPreferred: boolean;
+}
+
+export interface MeasurementUnitConfig {
+  id: string;
+  name: string;
+  symbol: string;
+  type: 'QUANTITY' | 'VOLUME' | 'WEIGHT' | 'LENGTH';
+}
+
+export interface FuelEnergySettingsConfig {
+  minMpgThreshold: number;
+  maxMpgThreshold: number;
+  tankCapacityCheck: boolean;
+  evKwhFactor: number;
+}
+
+export interface FuelTypeConfig {
+  id: string;
+  name: string;
+  unit: string;
+  isRenewable: boolean;
+  avgPricePerUnit: number;
+}
+
+export interface SavedReportConfig {
+  id: string;
+  title: string;
+  category: 'IFTA' | 'OPERATIONS' | 'MAINTENANCE' | 'FINANCIAL' | 'SAFETY';
+  schedule: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'MANUAL';
+  recipients: string;
+  lastRun: string;
+  format: 'CSV' | 'PDF' | 'EXCEL';
+}
+
+export interface SecuritySettingsConfig {
+  twoFactorRequired: boolean;
+  sessionTimeoutMinutes: number;
+  passwordMinLength: number;
+  requireSpecialChar: boolean;
+  ipWhitelist: string;
+}
+
+export interface RoleDefinition {
+  id: string;
+  roleName: string;
+  description: string;
+  userCount: number;
+  permissions: {
+    assets: { view: boolean; create: boolean; edit: boolean; delete: boolean; approve: boolean };
+    workOrders: { view: boolean; create: boolean; edit: boolean; delete: boolean; approve: boolean };
+    inspections: { view: boolean; create: boolean; edit: boolean; delete: boolean; approve: boolean };
+    fuel: { view: boolean; create: boolean; edit: boolean; delete: boolean; approve: boolean };
+    parts: { view: boolean; create: boolean; edit: boolean; delete: boolean; approve: boolean };
+    reports: { view: boolean; create: boolean; edit: boolean; delete: boolean; approve: boolean };
+    billing: { view: boolean; create: boolean; edit: boolean; delete: boolean; approve: boolean };
+  };
+}
+
+export interface RecordSetConfig {
+  id: string;
+  name: string;
+  description: string;
+  assetCount: number;
+  assignedUsers: string[];
+}
+
+export interface AIAdvisorSettingsConfig {
+  predictiveEnabled: boolean;
+  sensitivity: 'LOW' | 'MEDIUM' | 'HIGH';
+  diagnosticAssistant: boolean;
+  estimateAuditing: boolean;
+}
+
+export interface AIHealthInsight {
+  id: string;
+  assetId: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  title: string;
+  prediction: string;
+  recommendation: string;
+  confidenceScore: number;
+  date: string;
+}
+
+export interface WebhookConfig {
+  id: string;
+  name: string;
+  url: string;
+  events: string[];
+  secret: string;
+  status: 'ACTIVE' | 'PAUSED' | 'FAILED';
+  lastTriggered: string;
+}
+
+export interface IntegrationLinkConfig {
+  id: string;
+  provider: 'SAMSARA' | 'MOTIVE' | 'GEOTAB' | 'WEX' | 'PREPASS' | 'QUICKBOOKS' | 'SAP';
+  name: string;
+  status: 'CONNECTED' | 'DISCONNECTED' | 'SYNCING';
+  category: 'TELEMATICS' | 'FUEL_CARDS' | 'TOLLS' | 'ACCOUNTING';
+  lastSync: string;
+}
+
+export interface SAMLSettingsConfig {
+  enabled: boolean;
+  idpEntityId: string;
+  ssoUrl: string;
+  certificateUploaded: boolean;
+  autoProvisionUsers: boolean;
+}
+
+export interface CustomFieldConfig {
+  id: string;
+  entity: 'ASSET' | 'WORK_ORDER' | 'PART' | 'INSPECTION' | 'CONTACT';
+  fieldName: string;
+  fieldType: 'TEXT' | 'NUMBER' | 'DROPDOWN' | 'DATE' | 'CHECKBOX';
+  required: boolean;
+  options?: string[];
+}
+
+export interface FleetGroupConfig {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  leader: string;
+  assetCount: number;
+}
+
+export interface LabelTagConfig {
+  id: string;
+  name: string;
+  color: string;
+  appliedCount: number;
+}
+
+export interface SavedViewConfig {
+  id: string;
+  module: string;
+  name: string;
+  isDefault: boolean;
+  filtersJson: string;
+}
+
+export interface SandboxConfig {
+  id: string;
+  name: string;
+  status: 'ACTIVE' | 'IDLE' | 'SYNCING';
+  createdAt: string;
+  lastSynced: string;
+}
+
+// Real Dataset Placeholders (Entity data loaded live from NestJS API)
+export const initialUsers: User[] = [];
+export const initialAssets: Asset[] = [];
+export const initialComponents: Component[] = [];
+export const initialPMTemplates: PMTemplate[] = [];
+export const initialPMSchedules: PMSchedule[] = [];
+export const initialRenewalAlerts: RenewalAlert[] = [];
+export const initialComplianceRenewals: ComplianceRenewal[] = [];
+export const initialVendors: Vendor[] = [];
+export const initialFuelLogs: FuelLog[] = [];
+export const initialTollRecords: TollRecord[] = [];
+export const initialDOTInspections: DOTInspection[] = [];
+export const initialWorkOrders: WorkOrder[] = [];
+export const initialEmergencyTickets: EmergencyTicket[] = [];
+export const initialFaultCodes: FaultCode[] = [];
+export const initialAuditLogs: AuditLog[] = [];
+export const initialNotifications: SystemNotification[] = [];
+export const initialAccidentClaims: AccidentClaim[] = [];
+export const initialAssignments: VehicleAssignment[] = [];
+export const initialTireReadings: TireReading[] = [];
+export const initialBrakeReadings: BrakeReading[] = [];
+export const initialExpenseRecords: ExpenseRecord[] = [];
+export const initialReplacementAnalysis: ReplacementAnalysis[] = [];
+export const initialIssues: Issue[] = [];
+export const initialContacts: Contact[] = [];
+export const initialParts: Part[] = [];
+export const initialPlaces: Place[] = [];
+export const initialDocuments: FleetDocument[] = [];
+export const initialWarranties: Warranty[] = [];
+
+// Initial Configuration Datasets
+export const initialBillingProfile: BillingProfile = {
+  orgName: '',
+  contactName: '',
+  email: '',
+  taxId: '',
+  address: '',
+  paymentMethod: ''
+};
+
+export const initialPrimaryPlan: PrimaryPlan = {
+  planName: 'Fleet Management System',
+  billingCycle: 'Annual',
+  status: 'ACTIVE',
+  currentVehicles: 0,
+  maxVehicles: 50,
+  pricePerVehicle: 0
+};
+
+export const initialGeneralSettings: GeneralSettingsConfig = {
+  companyName: 'Fleet Management System',
+  logoUrl: '',
+  timezone: 'America/Chicago (CST)',
+  dateFormat: 'MM/DD/YYYY',
+  baseCurrency: 'USD ($)',
+  unitSystem: 'IMPERIAL'
+};
+
+export const initialVehicleStatuses: VehicleStatusConfig[] = [
+  { id: 'vs1', name: 'Operable', color: 'bg-emerald-500 text-white', type: 'OPERABLE', description: 'Active and ready for driver dispatch.' },
+  { id: 'vs2', name: 'Needs Attention', color: 'bg-amber-500 text-black', type: 'NEEDS_ATTENTION', description: 'Minor defect reported or service reminder due.' },
+  { id: 'vs3', name: 'Inoperable / Out of Service', color: 'bg-rose-500 text-white', type: 'INOPERABLE', description: 'Critical defect, failed inspection or safety lockdown.' },
+  { id: 'vs4', name: 'In Shop (Maintenance)', color: 'bg-[#00BA7C] text-white', type: 'IN_SHOP', description: 'Currently undergoing internal or vendor shop repair.' },
+  { id: 'vs5', name: 'Sold / Archived', color: 'bg-slate-500 text-white', type: 'ARCHIVED', description: 'Asset retired or liquidated from fleet roster.' }
 ];
 
-export const initialAssets: Asset[] = [
-  { id: 'a1', type: 'TRACTOR', name: 'Tractor #101 (Peterbilt 579)', vin: '1N4AL3AP0C123456', plateNumber: 'TX-TRK-101', status: 'OPERABLE', odometer: 145200.5, fuelType: 'Diesel', qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=asset-1N4AL3AP0C123456' },
-  { id: 'a2', type: 'TRAILER', name: 'Trailer #201 (Utility Dry Van)', vin: '4H7A123456789012', plateNumber: 'TX-TRL-201', status: 'OPERABLE', odometer: 89300.2, fuelType: 'None', qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=asset-4H7A123456789012', parentAssetId: 'a1' },
-  { id: 'a3', type: 'TRACTOR', name: 'Tractor #102 (Freightliner Cascadia)', vin: '1N4AL3AP0D987654', plateNumber: 'TX-TRK-102', status: 'NEEDS_ATTENTION', odometer: 280100.8, fuelType: 'Diesel', qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=asset-1N4AL3AP0D987654' },
-  { id: 'a4', type: 'TRAILER', name: 'Trailer #202 (Great Dane Reefer)', vin: '4H7A987654321098', plateNumber: 'TX-TRL-202', status: 'OPERABLE', odometer: 120400.1, fuelType: 'Diesel', qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=asset-4H7A987654321098', parentAssetId: 'a3' }
+export const initialVehicleTypes: VehicleTypeConfig[] = [
+  { id: 'vt1', name: 'Class 8 Heavy Duty Tractor', category: 'TRUCK', fuelType: 'Diesel', description: 'Sleeper & Daycab Highway Haulers (Peterbilt, Freightliner, Kenworth)', expectedLifeMiles: 750000 },
+  { id: 'vt2', name: 'Dry Van Trailer 53ft', category: 'TRAILER', fuelType: 'None', description: 'Standard 53ft Enclosed Tandem Cargo Trailer', expectedLifeMiles: 500000 },
+  { id: 'vt3', name: 'Refrigerated Reefer Trailer', category: 'TRAILER', fuelType: 'Diesel', description: 'Temperature-controlled reefer unit with Thermo King / Carrier engine', expectedLifeMiles: 400000 },
+  { id: 'vt4', name: 'Medium Duty Box Truck', category: 'TRUCK', fuelType: 'Diesel', description: '26ft Straight Truck for Regional & Metro Delivery', expectedLifeMiles: 300000 },
+  { id: 'vt5', name: 'Cargo Delivery Van', category: 'VAN', fuelType: 'Unleaded', description: 'Sprinter / Transit High Roof Last Mile Van', expectedLifeMiles: 200000 }
 ];
 
-const initialComponents: Component[] = [
-  { id: 'c1', assetId: 'a1', name: 'Engine', status: 'OPERABLE', qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=component-engine-a1' },
-  { id: 'c2', assetId: 'a1', name: 'Fuel System', status: 'OPERABLE', qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=component-fuel-system-a1' },
-  { id: 'c3', assetId: 'a1', name: 'Electrical', status: 'OPERABLE', qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=component-electrical-a1' },
-  { id: 'c4', assetId: 'a1', name: 'Tyres', status: 'OPERABLE', qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=component-tyres-a1' },
-  { id: 'c5', assetId: 'a2', name: 'Kingpin', status: 'OPERABLE', qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=component-kingpin-a2' },
-  { id: 'c6', assetId: 'a2', name: 'Sliding Tandem', status: 'OPERABLE', qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=component-sliding-tandem-a2' },
-  { id: 'c7', assetId: 'a2', name: 'Door Seals', status: 'OPERABLE', qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=component-door-seals-a2' }
+export const initialExternalVehicleIds: ExternalVehicleIdConfig[] = [];
+
+export const initialExpenseSettings: ExpenseSettingsConfig = {
+  currency: 'USD ($)',
+  taxInclusive: false,
+  approvalThreshold: 500,
+  requireReceipt: true
+};
+
+export const initialInspectionSettings: InspectionSettingsConfig = {
+  requirePhotoOnFailure: true,
+  requireDigitalSignature: true,
+  autoCreateWorkOrder: true,
+  gracePeriodDays: 1
+};
+
+export const initialIssuePriorities: IssuePriorityConfig[] = [
+  { id: 'ip1', name: 'Critical (Safety Hazard)', slaHours: 4, color: 'text-rose-600 bg-rose-50 border-rose-200', autoEscalate: true },
+  { id: 'ip2', name: 'High Priority', slaHours: 12, color: 'text-orange-600 bg-orange-50 border-orange-200', autoEscalate: true },
+  { id: 'ip3', name: 'Medium Priority', slaHours: 24, color: 'text-amber-600 bg-amber-50 border-amber-200', autoEscalate: false },
+  { id: 'ip4', name: 'Low Priority', slaHours: 72, color: 'text-slate-600 bg-slate-50 border-slate-200', autoEscalate: false }
 ];
 
-const initialPMTemplates: PMTemplate[] = [
-  { id: 't1', name: 'PM-A Dry Service', description: 'Standard 10k mile check. Inspect fluid levels, brakes, lights, and grease chassis.', triggerMileage: 10000, triggerDays: 90, stepsJson: ['Check engine oil level', 'Check coolants and fluids', 'Lubricate chassis fittings', 'Inspect brake linings', 'Inspect tyres pressure'] },
-  { id: 't2', name: 'PM-B Wet Service', description: 'Comprehensive 25k mile service. Engine oil change, replacement of filters, chassis lubrication.', triggerMileage: 25000, triggerDays: 180, stepsJson: ['Drain & replace engine oil', 'Replace oil filter', 'Replace primary/secondary fuel filters', 'Perform brake adjustments', 'Check transmission fluid'] },
-  { id: 't3', name: 'Annual Trailer PM', description: 'Yearly structural, electrical and air system inspection for trailers.', triggerMileage: 50000, triggerDays: 365, stepsJson: ['Inspect kingpin wear', 'Lube sliding tandem rails', 'Inspect brake chambers', 'Verify ABS sensor operations'] }
+export const initialFaultRules: FaultRuleConfig[] = [
+  { id: 'fr1', source: 'Motive', codePattern: 'SPN 110*', severity: 'HIGH', action: 'AUTO_WORK_ORDER', enabled: true },
+  { id: 'fr2', source: 'Samsara', codePattern: 'SPN 651*', severity: 'CRITICAL', action: 'AUTO_WORK_ORDER', enabled: true },
+  { id: 'fr3', source: 'Geotab', codePattern: 'P0300*', severity: 'MEDIUM', action: 'CREATE_ISSUE', enabled: true },
+  { id: 'fr4', source: 'Motive', codePattern: 'SPN 96*', severity: 'LOW', action: 'NOTIFY_ONLY', enabled: false }
 ];
 
-const initialPMSchedules: PMSchedule[] = [
-  { id: 'ps1', assetId: 'a1', templateId: 't1', lastServiceOdometer: 140000.0, lastServiceDate: '2026-05-15', nextDueOdometer: 150000.0, nextDueDate: '2026-08-15', status: 'COMPLIANT' },
-  { id: 'ps2', assetId: 'a3', templateId: 't1', lastServiceOdometer: 268000.0, lastServiceDate: '2026-03-01', nextDueOdometer: 278000.0, nextDueDate: '2026-06-01', status: 'OVERDUE' }
+export const initialReminderSettings: ReminderSettingsConfig = {
+  leadDistanceMiles: 500,
+  leadTimeDays: 14,
+  snoozeLimitDays: 7,
+  emailAlerts: true
+};
+
+export const initialVehicleRenewalTypes: RenewalTypeConfig[] = [
+  { id: 'vrt1', name: 'Federal DOT Annual Inspection', target: 'VEHICLE', defaultLeadDays: 30, requiredDocs: 'DOT Certificate & Brake Test Sheet' },
+  { id: 'vrt2', name: 'IRP Cab Card Registration', target: 'VEHICLE', defaultLeadDays: 45, requiredDocs: 'State IRP Cab Card Copy' },
+  { id: 'vrt3', name: 'Commercial Liability Insurance', target: 'VEHICLE', defaultLeadDays: 30, requiredDocs: 'Acord 25 Certificate of Insurance' },
+  { id: 'vrt4', name: 'IFTA Annual Fuel Decal', target: 'VEHICLE', defaultLeadDays: 60, requiredDocs: 'State IFTA License & Decal Proof' }
 ];
 
-const initialRenewalAlerts: RenewalAlert[] = [
-  { id: 'r1', assetId: 'a1', type: 'INSURANCE_POLICY', description: 'Commercial Liability - Progressive Policy #99201', expiryDate: '2026-08-01', status: 'ACTIVE' },
-  { id: 'r2', assetId: 'a1', type: 'DOT_ANNUAL_INSPECTION', description: 'Federal DOT Annual Inspection - Certificate #DOT-TX-9901', expiryDate: '2026-06-20', status: 'ACTIVE' }, // 4 days left
-  { id: 'r3', assetId: 'a3', type: 'IRP_REGISTRATION', description: 'IRP Cab Card Registration - Account #IRP-88210', expiryDate: '2026-06-12', status: 'EXPIRED' } // Blocked dispatch
+export const initialContactRenewalTypes: RenewalTypeConfig[] = [
+  { id: 'crt1', name: 'CDL Class A License Renewal', target: 'CONTACT', defaultLeadDays: 60, requiredDocs: 'State CDL Copy (Front & Back)' },
+  { id: 'crt2', name: 'DOT Medical Examiner Certificate', target: 'CONTACT', defaultLeadDays: 30, requiredDocs: 'Medical Examiner Report MCSA-5876' },
+  { id: 'crt3', name: 'TWIC Port Security Card', target: 'CONTACT', defaultLeadDays: 45, requiredDocs: 'TSA TWIC Card Identification' },
+  { id: 'crt4', name: 'Hazmat Endorsement Training', target: 'CONTACT', defaultLeadDays: 30, requiredDocs: 'Hazmat Certification Certificate' }
 ];
 
-const initialVendors: Vendor[] = [
-  { id: 'v1', name: 'Dallas Truck & Engine Center', type: 'HEAVY_DUTY_SHOP', negotiatedRate: 145.0, contactInfo: 'dallas@truckcenter.com | (214) 555-0199', invoiceHistory: [{ invoiceNo: 'INV-1002', amount: 1250.00, date: '2026-05-12', details: 'EGR Valve replacement' }] },
-  { id: 'v2', name: 'Love\'s Travel Stops #441', type: 'TYRE_SPECIALIST', negotiatedRate: 110.0, contactInfo: 'store441@loves.com | (972) 555-0322', invoiceHistory: [{ invoiceNo: 'INV-8899', amount: 620.00, date: '2026-04-18', details: 'Steer tyre replacement' }] },
-  { id: 'v3', name: 'Roadside Repair Inc', type: 'MOBILE_ROADSIDE_SERVICE', negotiatedRate: 165.0, contactInfo: 'roadside@repair.com | (800) 555-0100', invoiceHistory: [] }
+export const initialMaintenanceSettings: MaintenanceSettingsConfig = {
+  defaultLaborRate: 125.00,
+  partsMarkupPercent: 15,
+  woNumberPrefix: 'WO-',
+  requirePoThreshold: 1000.00
+};
+
+export const initialReasonForRepairCodes: ReasonForRepairCode[] = [
+  { id: 'rc1', code: 'PM-ROUTINE', description: 'Scheduled Preventative Maintenance Service', category: 'SCHEDULED' },
+  { id: 'rc2', code: 'DRV-REPORT', description: 'Driver Pre-Trip / Post-Trip Defect Report', category: 'UNSCHEDULED' },
+  { id: 'rc3', code: 'INSP-FAIL', description: 'eDVIR Inspection Checklist Item Failure', category: 'UNSCHEDULED' },
+  { id: 'rc4', code: 'ROAD-BREAK', description: 'Emergency Roadside Breakdown Incident', category: 'BREAKDOWN' },
+  { id: 'rc5', code: 'DOT-VIOL', description: 'Roadside State DOT Scale / Law Enforcement Citation', category: 'UNSCHEDULED' },
+  { id: 'rc6', code: 'ACC-COLL', description: 'Accident Collision & Body Damage Repair', category: 'ACCIDENT' },
+  { id: 'rc7', code: 'OEM-RECALL', description: 'Manufacturer Safety Recall Campaign', category: 'RECALL' }
 ];
 
-export const initialFuelLogs: FuelLog[] = [
-  { id: 'f1', assetId: 'a1', cardTransactionId: 'TX-FUEL-9901', gallons: 120, cost: 420.00, location: 'TX', odometer: 144500, mpg: 6.1, isAnomaly: false, createdAt: '2026-06-10T14:30:00Z' },
-  { id: 'f2', assetId: 'a1', cardTransactionId: 'TX-FUEL-9950', gallons: 115, cost: 405.00, location: 'TX', odometer: 145200, mpg: 6.09, isAnomaly: false, createdAt: '2026-06-15T09:15:00Z' },
-  { id: 'f3', assetId: 'a3', cardTransactionId: 'NV-FUEL-1001', gallons: 150, cost: 580.00, location: 'NV', odometer: 280100, mpg: 2.1, isAnomaly: true, createdAt: '2026-06-14T18:45:00Z' } // Anomaly drop
+export const initialRepairPriorityCodes: RepairPriorityClassCode[] = [
+  { id: 'rpc1', code: 'EMERGENCY', name: 'Emergency Roadside (Immediate)', description: 'Vehicle stopped on highway / urgent mobile dispatch' },
+  { id: 'rpc2', code: 'SAFETY_CRITICAL', name: 'Safety Critical (Lockdown)', description: 'Brakes, steering or tyres compromised. Cannot operate.' },
+  { id: 'rpc3', code: 'UNSCHEDULED', name: 'Unscheduled Maintenance', description: 'Repair required before next dispatch cycle' },
+  { id: 'rpc4', code: 'SCHEDULED', name: 'Routine Scheduled PM', description: 'Standard interval servicing & filter changes' }
 ];
 
-export const initialTollRecords: TollRecord[] = [
-  { id: 'tl1', assetId: 'a1', transponderId: 'TX-PASS-881', amount: 12.50, location: 'DFW Turnpike Toll Plaza', timestamp: '2026-06-12T08:12:00Z' },
-  { id: 'tl2', assetId: 'a3', transponderId: 'TX-PASS-902', amount: 24.00, location: 'Houston Grand Parkway', timestamp: '2026-06-14T11:40:00Z' }
+export const initialVmrsCodes: VmrsCode[] = [
+  { id: 'vmrs1', systemCode: '013', systemName: 'Brakes & Wheels', assemblyCode: '001', assemblyName: 'Front Brake Assembly', componentCode: '014', componentName: 'Brake Drum / Rotor' },
+  { id: 'vmrs2', systemCode: '013', systemName: 'Brakes & Wheels', assemblyCode: '002', assemblyName: 'Air Brake System', componentCode: '022', componentName: 'Air Brake Chamber (Type 30/30)' },
+  { id: 'vmrs3', systemCode: '042', systemName: 'Engine & Cooling', assemblyCode: '004', assemblyName: 'Radiator & Hoses', componentCode: '010', componentName: 'Water Pump Assembly' },
+  { id: 'vmrs4', systemCode: '044', systemName: 'Fuel System', assemblyCode: '001', assemblyName: 'Fuel Supply & Injection', componentCode: '035', componentName: 'Fuel Injector Nozzle' },
+  { id: 'vmrs5', systemCode: '034', systemName: 'Lighting & Electrical', assemblyCode: '002', assemblyName: 'Headlights & Turn Signals', componentCode: '005', componentName: 'LED Headlamp Cluster' }
 ];
 
-const initialDOTInspections: DOTInspection[] = [
-  { id: 'd1', assetId: 'a1', inspectionDate: '2026-05-10', result: 'CLEAN', violationsJson: [], createdAt: '2026-05-10T10:00:00Z' },
-  { id: 'd2', assetId: 'a3', inspectionDate: '2026-06-05', result: 'VIOLATION', violationsJson: ['Out-of-adjustment brake chamber', 'Leaking wheel seal'], createdAt: '2026-06-05T14:22:00Z' }
+export const initialSmartAssessmentConfig: SmartAssessmentConfig = {
+  aiAuditEnabled: true,
+  laborBenchmarkTolerancePercent: 20,
+  partsMarkupAlertThreshold: 25
+};
+
+export const initialPartLocations: PartLocationConfig[] = [
+  { id: 'ploc1', name: 'Main Shop Facility - Warehouse A', type: 'WAREHOUSE', address: '1200 Logistics Blvd, Dallas TX', capacity: 500 },
+  { id: 'ploc2', name: 'Parts Cage Bin B1-B10', type: 'SHOP_BIN', address: 'Main Shop, Dallas TX', capacity: 150 },
+  { id: 'ploc3', name: 'Mobile Service Truck #1 (Ford F-550)', type: 'MOBILE_TRUCK', address: 'Mobile Unit - North Texas Route', capacity: 45 },
+  { id: 'ploc4', name: 'Houston Terminal Storage Bay', type: 'DEPOT', address: '4500 Port Access Rd, Houston TX', capacity: 200 }
 ];
 
-const initialWorkOrders: WorkOrder[] = [
-  { id: 'wo1', assetId: 'a3', priority: 'HIGH', type: 'INTERNAL', status: 'OPEN', description: 'DOT Violation: Out-of-adjustment brake chamber and leaking wheel seal.', laborCost: 0, partsCost: 0, totalCost: 0, dotViolationId: 'd2', createdAt: '2026-06-05T14:30:00Z' }
+export const initialPartCategories: PartCategoryConfig[] = [
+  { id: 'pcat1', name: 'Filters (Oil, Fuel, Air, Cabin)', code: 'FILTERS', description: 'Primary and secondary engine filtration media' },
+  { id: 'pcat2', name: 'Brakes & Friction', code: 'BRAKES', description: 'Brake drums, shoes, pads, chambers, air valves' },
+  { id: 'pcat3', name: 'Tires & Wheels', code: 'TIRES', description: 'Steer, drive, trailer tires, rims and valve stems' },
+  { id: 'pcat4', name: 'Fluids & Lubricants', code: 'FLUIDS', description: '15W-40 Oil, Coolant, DEF, Grease, Gear Lube' },
+  { id: 'pcat5', name: 'Engine Components', code: 'ENGINE', description: 'Turbos, belts, sensors, alternators, starters' },
+  { id: 'pcat6', name: 'Electrical & Lighting', code: 'ELECTRICAL', description: 'Fuses, harnesses, batteries, LED lights' }
 ];
 
-const initialEmergencyTickets: EmergencyTicket[] = [
-  { id: 'e1', assetId: 'a3', reporterName: 'Bob Driver', description: 'Tractor cooling engine warning light on, steam from radiator.', gpsLatitude: 32.7767, gpsLongitude: -96.7970, status: 'DISPATCHED', assignedVendorId: 'v3', mechanicEta: '2026-06-16T14:45:00Z', downtimeHours: 1.5, createdAt: '2026-06-16T13:00:00Z' }
+export const initialPartManufacturers: PartManufacturerConfig[] = [
+  { id: 'pmfg1', name: 'Bendix Commercial Vehicle Systems', country: 'USA', contactInfo: 'bendix-parts@kars.com', isPreferred: true },
+  { id: 'pmfg2', name: 'Cummins Genuine Parts', country: 'USA', contactInfo: 'cummins-fleet@cummins.com', isPreferred: true },
+  { id: 'pmfg3', name: 'Fleetguard Filtration', country: 'USA', contactInfo: 'support@fleetguard.com', isPreferred: true },
+  { id: 'pmfg4', name: 'Michelin North America', country: 'USA', contactInfo: 'commercial@michelin.com', isPreferred: true },
+  { id: 'pmfg5', name: 'Eaton Corporation', country: 'USA', contactInfo: 'transmissions@eaton.com', isPreferred: true }
 ];
 
-const initialFaultCodes: FaultCode[] = [
-  { id: 'fc1', assetId: 'a3', source: 'Motive', code: 'SPN 110 FMI 15', description: 'Engine Coolant Temperature High', status: 'ACTIVE', workOrderId: 'wo1', createdAt: '2026-06-16T12:55:00Z' }
+export const initialMeasurementUnits: MeasurementUnitConfig[] = [
+  { id: 'mu1', name: 'Each', symbol: 'ea', type: 'QUANTITY' },
+  { id: 'mu2', name: 'US Gallons', symbol: 'gal', type: 'VOLUME' },
+  { id: 'mu3', name: 'Quarts', symbol: 'qt', type: 'VOLUME' },
+  { id: 'mu4', name: 'Box / Pack', symbol: 'box', type: 'QUANTITY' },
+  { id: 'mu5', name: 'Feet', symbol: 'ft', type: 'LENGTH' },
+  { id: 'mu6', name: 'Pounds', symbol: 'lb', type: 'WEIGHT' }
 ];
 
-const initialAuditLogs: AuditLog[] = [
-  { id: 'au1', userName: 'System', action: 'CREATE', entityName: 'Asset', entityId: 'a1', timestamp: '2026-06-16T07:21:43Z' }
+export const initialFuelEnergySettings: FuelEnergySettingsConfig = {
+  minMpgThreshold: 4.5,
+  maxMpgThreshold: 9.0,
+  tankCapacityCheck: true,
+  evKwhFactor: 33.7
+};
+
+export const initialFuelTypes: FuelTypeConfig[] = [
+  { id: 'ft1', name: 'Ultra-Low Sulfur Diesel #2', unit: 'Gallons', isRenewable: false, avgPricePerUnit: 3.85 },
+  { id: 'ft2', name: 'Diesel Exhaust Fluid (DEF)', unit: 'Gallons', isRenewable: false, avgPricePerUnit: 2.75 },
+  { id: 'ft3', name: 'Unleaded Regular (87 Octane)', unit: 'Gallons', isRenewable: false, avgPricePerUnit: 3.10 },
+  { id: 'ft4', name: 'Biodiesel Blend (B20)', unit: 'Gallons', isRenewable: true, avgPricePerUnit: 3.90 },
+  { id: 'ft5', name: 'Commercial EV Fast Charge', unit: 'kWh', isRenewable: true, avgPricePerUnit: 0.22 }
 ];
 
-const initialNotifications: SystemNotification[] = [
-  { id: 'n1', type: 'COMPLIANCE', title: 'IRP Cab Card Expired', message: 'Tractor #102 is blocked from active dispatches.', timestamp: '2026-06-12T00:00:00Z', read: false },
-  { id: 'n2', type: 'PM_ALERT', title: 'PM Service Overdue', message: 'Tractor #102 PM-A Dry Service is overdue.', timestamp: '2026-06-01T08:00:00Z', read: false },
-  { id: 'n3', type: 'BREAKDOWN', title: 'Breakdown Reported', message: 'Tractor #102 cooling engine failure.', timestamp: '2026-06-16T13:00:00Z', read: false }
-];
+export const initialSavedReports: SavedReportConfig[] = [];
 
-const initialAccidentClaims: AccidentClaim[] = [
+export const initialSecuritySettings: SecuritySettingsConfig = {
+  twoFactorRequired: false,
+  sessionTimeoutMinutes: 60,
+  passwordMinLength: 8,
+  requireSpecialChar: true,
+  ipWhitelist: ''
+};
+
+export const initialRoleDefinitions: RoleDefinition[] = [
   {
-    id: 'claim-1',
-    assetId: 'a3',
-    driverName: 'Bob Driver',
-    policeReportNumber: 'PR-2026-8812',
-    statement: 'Collision on highway I-35. Tractor #102 sustained front-end damage after third-party cut in front.',
-    thirdPartyDetails: 'State Farm Insurance, Policy #SF-88210, Driver: Jane Doe',
-    insurancePayout: 4500,
-    actualRepairCost: 5200,
-    status: 'OPEN',
-    claimDate: '2026-06-14'
+    id: 'role-fm',
+    roleName: 'Fleet Manager',
+    description: 'Full supervisory authority across all vehicles, finances, billing, and reporting.',
+    userCount: 0,
+    permissions: {
+      assets: { view: true, create: true, edit: true, delete: true, approve: true },
+      workOrders: { view: true, create: true, edit: true, delete: true, approve: true },
+      inspections: { view: true, create: true, edit: true, delete: true, approve: true },
+      fuel: { view: true, create: true, edit: true, delete: true, approve: true },
+      parts: { view: true, create: true, edit: true, delete: true, approve: true },
+      reports: { view: true, create: true, edit: true, delete: true, approve: true },
+      billing: { view: true, create: true, edit: true, delete: true, approve: true }
+    }
+  },
+  {
+    id: 'role-ma',
+    roleName: 'Maintenance Admin',
+    description: 'Manages shop work orders, preventative maintenance, parts inventory, and compliance.',
+    userCount: 0,
+    permissions: {
+      assets: { view: true, create: true, edit: true, delete: false, approve: true },
+      workOrders: { view: true, create: true, edit: true, delete: false, approve: true },
+      inspections: { view: true, create: true, edit: true, delete: false, approve: true },
+      fuel: { view: true, create: true, edit: true, delete: false, approve: false },
+      parts: { view: true, create: true, edit: true, delete: true, approve: true },
+      reports: { view: true, create: true, edit: false, delete: false, approve: false },
+      billing: { view: false, create: false, edit: false, delete: false, approve: false }
+    }
+  },
+  {
+    id: 'role-mech',
+    roleName: 'Mechanic Technician',
+    description: 'Performs shop inspections, logs labor and parts usage on assigned work orders.',
+    userCount: 0,
+    permissions: {
+      assets: { view: true, create: false, edit: false, delete: false, approve: false },
+      workOrders: { view: true, create: false, edit: true, delete: false, approve: false },
+      inspections: { view: true, create: true, edit: false, delete: false, approve: false },
+      fuel: { view: false, create: false, edit: false, delete: false, approve: false },
+      parts: { view: true, create: false, edit: true, delete: false, approve: false },
+      reports: { view: false, create: false, edit: false, delete: false, approve: false },
+      billing: { view: false, create: false, edit: false, delete: false, approve: false }
+    }
+  },
+  {
+    id: 'role-drv',
+    roleName: 'Commercial Driver',
+    description: 'Submits daily eDVIR checklists, fuel card receipts, and roadside breakdown tickets.',
+    userCount: 0,
+    permissions: {
+      assets: { view: true, create: false, edit: false, delete: false, approve: false },
+      workOrders: { view: false, create: false, edit: false, delete: false, approve: false },
+      inspections: { view: true, create: true, edit: false, delete: false, approve: false },
+      fuel: { view: true, create: true, edit: false, delete: false, approve: false },
+      parts: { view: false, create: false, edit: false, delete: false, approve: false },
+      reports: { view: false, create: false, edit: false, delete: false, approve: false },
+      billing: { view: false, create: false, edit: false, delete: false, approve: false }
+    }
   }
 ];
 
-export const initialAssignments: VehicleAssignment[] = [
-  { id: 'va1', assetId: 'a1', driverId: 'u4', driverName: 'Bob Driver', startDate: '2026-06-10', endDate: null, notes: 'Dallas to Houston route', status: 'ACTIVE' },
-  { id: 'va2', assetId: 'a3', driverId: 'u4', driverName: 'Bob Driver', startDate: '2026-05-01', endDate: '2026-05-31', notes: 'West coast relay', status: 'COMPLETED' }
-];
+export const initialRecordSets: RecordSetConfig[] = [];
 
-export const initialTireReadings: TireReading[] = [
-  { id: 'tr1', assetId: 'a1', axlePosition: 'STEER_LEFT', tireBrand: 'Michelin XZA', psi: 110, treadDepth: 10, recordedAt: '2026-06-10T09:00:00Z', recordedBy: 'Dave Mechanic' },
-  { id: 'tr2', assetId: 'a1', axlePosition: 'STEER_RIGHT', tireBrand: 'Michelin XZA', psi: 108, treadDepth: 9, recordedAt: '2026-06-10T09:00:00Z', recordedBy: 'Dave Mechanic' },
-  { id: 'tr3', assetId: 'a1', axlePosition: 'DRIVE1_LEFT', tireBrand: 'Bridgestone R283', psi: 100, treadDepth: 6, recordedAt: '2026-06-10T09:00:00Z', recordedBy: 'Dave Mechanic' },
-  { id: 'tr4', assetId: 'a1', axlePosition: 'DRIVE1_RIGHT', tireBrand: 'Bridgestone R283', psi: 98, treadDepth: 5, recordedAt: '2026-06-10T09:00:00Z', recordedBy: 'Dave Mechanic' },
-  { id: 'tr5', assetId: 'a3', axlePosition: 'STEER_LEFT', tireBrand: 'Goodyear G661', psi: 85, treadDepth: 3, recordedAt: '2026-06-12T14:00:00Z', recordedBy: 'Dave Mechanic' },
-  { id: 'tr6', assetId: 'a3', axlePosition: 'STEER_RIGHT', tireBrand: 'Goodyear G661', psi: 82, treadDepth: 2, recordedAt: '2026-06-12T14:00:00Z', recordedBy: 'Dave Mechanic' }
-];
+export const initialAIAdvisorSettings: AIAdvisorSettingsConfig = {
+  predictiveEnabled: true,
+  sensitivity: 'HIGH',
+  diagnosticAssistant: true,
+  estimateAuditing: true
+};
 
-export const initialExpenseRecords: ExpenseRecord[] = [
-  { id: 'ex1', assetId: 'a1', category: 'FUEL', amount: 420.00, description: 'WEX fuel card fill-up TX', date: '2026-06-10', linkedWoId: null },
-  { id: 'ex2', assetId: 'a1', category: 'FUEL', amount: 405.00, description: 'WEX fuel card fill-up TX', date: '2026-06-15', linkedWoId: null },
-  { id: 'ex3', assetId: 'a1', category: 'LABOR', amount: 580.00, description: 'EGR valve service labor', date: '2026-05-12', linkedWoId: 'wo-1' },
-  { id: 'ex4', assetId: 'a1', category: 'TOLLS', amount: 12.50, description: 'DFW Turnpike', date: '2026-06-12', linkedWoId: null },
-  { id: 'ex5', assetId: 'a1', category: 'INSURANCE', amount: 1200.00, description: 'Progressive monthly premium', date: '2026-06-01', linkedWoId: null },
-  { id: 'ex6', assetId: 'a3', category: 'FUEL', amount: 580.00, description: 'WEX fuel card NV', date: '2026-06-14', linkedWoId: null },
-  { id: 'ex7', assetId: 'a3', category: 'PARTS', amount: 340.00, description: 'Brake chamber replacement parts', date: '2026-06-05', linkedWoId: null },
-  { id: 'ex8', assetId: 'a3', category: 'REGISTRATION', amount: 850.00, description: 'IRP Cab Card annual renewal', date: '2026-01-15', linkedWoId: null }
-];
+export const initialAIHealthInsights: AIHealthInsight[] = [];
 
-export const initialReplacementAnalysis: ReplacementAnalysis[] = [
-  { id: 'ra1', assetId: 'a1', purchasePrice: 148000, purchaseDate: '2021-03-15', lifetimeCostToDate: 42500, estimatedCurrentValue: 95000, recommendation: 'KEEP' },
-  { id: 'ra2', assetId: 'a3', purchasePrice: 135000, purchaseDate: '2018-07-20', lifetimeCostToDate: 98200, estimatedCurrentValue: 42000, recommendation: 'MONITOR' },
-  { id: 'ra3', assetId: 'a2', purchasePrice: 42000, purchaseDate: '2020-01-10', lifetimeCostToDate: 12400, estimatedCurrentValue: 28000, recommendation: 'KEEP' },
-  { id: 'ra4', assetId: 'a4', purchasePrice: 55000, purchaseDate: '2016-09-05', lifetimeCostToDate: 67800, estimatedCurrentValue: 18000, recommendation: 'REPLACE' }
-];
+export const initialWebhooks: WebhookConfig[] = [];
 
-export const initialIssues: Issue[] = [
-  { id: 'iss1', assetId: 'a1', reportedBy: 'Bob Driver', title: 'AC Unit Blowing Warm Air', description: 'Cab AC not cooling. Compressor seems weak.', severity: 'MEDIUM', status: 'OPEN', createdAt: '2026-06-14T08:00:00Z', resolvedAt: null, linkedWoId: null },
-  { id: 'iss2', assetId: 'a3', reportedBy: 'Bob Driver', title: 'Check Engine Light On', description: 'CEL appeared after restart at truck stop. No power loss noticed yet.', severity: 'HIGH', status: 'INVESTIGATING', createdAt: '2026-06-12T11:30:00Z', resolvedAt: null, linkedWoId: null },
-  { id: 'iss3', assetId: 'a2', reportedBy: 'Dave Mechanic', title: 'Rear Door Seal Cracked', description: 'Top right door seal is cracked. Risk of load moisture exposure.', severity: 'LOW', status: 'RESOLVED', createdAt: '2026-06-08T14:00:00Z', resolvedAt: '2026-06-10T09:00:00Z', linkedWoId: null }
-];
+export const initialIntegrationLinks: IntegrationLinkConfig[] = [];
 
-export const initialContacts: Contact[] = [
-  { id: 'con1', userId: 'u4', name: 'Bob Driver', role: 'DRIVER', phone: '(214) 555-0181', email: 'driver@fleet.com', cdlNumber: 'TX-CDL-882910', cdlExpiry: '2026-09-01', medCardExpiry: '2026-08-15', emergencyContactName: 'Mary Driver', emergencyContactPhone: '(214) 555-0192', avatarInitials: 'BD' },
-  { id: 'con2', userId: 'u3', name: 'Dave Mechanic', role: 'MECHANIC', phone: '(972) 555-0210', email: 'mechanic@fleet.com', cdlNumber: null, cdlExpiry: null, medCardExpiry: null, emergencyContactName: 'Sue Mechanic', emergencyContactPhone: '(972) 555-0211', avatarInitials: 'DM' },
-  { id: 'con3', userId: 'u1', name: 'John Admin', role: 'MAINTENANCE_ADMIN', phone: '(817) 555-0330', email: 'admin@fleet.com', cdlNumber: null, cdlExpiry: null, medCardExpiry: null, emergencyContactName: null, emergencyContactPhone: null, avatarInitials: 'JA' },
-  { id: 'con4', userId: 'u2', name: 'Sarah Manager', role: 'FLEET_MANAGER', phone: '(214) 555-0404', email: 'manager@fleet.com', cdlNumber: null, cdlExpiry: null, medCardExpiry: null, emergencyContactName: null, emergencyContactPhone: null, avatarInitials: 'SM' },
-  { id: 'con5', userId: null, name: 'Carlos Reyes', role: 'DRIVER', phone: '(713) 555-0556', email: 'creyes@fleet.com', cdlNumber: 'TX-CDL-771200', cdlExpiry: '2027-02-28', medCardExpiry: '2026-12-01', emergencyContactName: 'Ana Reyes', emergencyContactPhone: '(713) 555-0557', avatarInitials: 'CR' }
-];
+export const initialSAMLSettings: SAMLSettingsConfig = {
+  enabled: false,
+  idpEntityId: '',
+  ssoUrl: '',
+  certificateUploaded: false,
+  autoProvisionUsers: true
+};
 
-export const initialParts: Part[] = [
-  { id: 'p1', partNumber: 'AIR-FILT-001', name: 'Engine Air Filter - Peterbilt 579', category: 'FILTERS', stockQty: 4, reorderLevel: 2, unitCost: 45.00, location: 'Shelf A-1', compatibleAssets: ['a1'] },
-  { id: 'p2', partNumber: 'OIL-FILT-002', name: 'Engine Oil Filter - Heavy Duty', category: 'FILTERS', stockQty: 8, reorderLevel: 3, unitCost: 28.50, location: 'Shelf A-2', compatibleAssets: ['a1', 'a3'] },
-  { id: 'p3', partNumber: 'BRK-PAD-010', name: 'Brake Lining Set - Steer Axle', category: 'BRAKES', stockQty: 2, reorderLevel: 2, unitCost: 185.00, location: 'Shelf B-3', compatibleAssets: ['a1', 'a3'] },
-  { id: 'p4', partNumber: 'FUEL-FILT-005', name: 'Primary Fuel Filter', category: 'FILTERS', stockQty: 6, reorderLevel: 3, unitCost: 35.00, location: 'Shelf A-3', compatibleAssets: ['a1', 'a3'] },
-  { id: 'p5', partNumber: 'ENG-BELT-020', name: 'Serpentine Belt - Cummins X15', category: 'ENGINE', stockQty: 1, reorderLevel: 2, unitCost: 220.00, location: 'Shelf C-1', compatibleAssets: ['a1'] },
-  { id: 'p6', partNumber: 'COOL-FLUID-001', name: 'Extended Life Coolant - 1 Gal', category: 'FLUIDS', stockQty: 12, reorderLevel: 4, unitCost: 18.00, location: 'Fluid Bay', compatibleAssets: ['a1', 'a3'] },
-  { id: 'p7', partNumber: 'TIR-STEER-080', name: 'Steer Tire 295/75R22.5 - Michelin', category: 'TIRES', stockQty: 0, reorderLevel: 2, unitCost: 520.00, location: 'Tire Bay', compatibleAssets: ['a1', 'a3'] },
-  { id: 'p8', partNumber: 'ELEC-FUSE-BOX', name: 'Main Fuse Box Assembly', category: 'ELECTRICAL', stockQty: 1, reorderLevel: 1, unitCost: 340.00, location: 'Shelf D-2', compatibleAssets: ['a3'] }
-];
+export const initialCustomFields: CustomFieldConfig[] = [];
 
-export const initialPlaces: Place[] = [
-  { id: 'pl1', name: 'Dallas Main Depot', type: 'DEPOT', address: '1200 Logistics Blvd, Dallas TX 75201', lat: 32.7767, lng: -96.7970, notes: 'Main fleet yard. 24/7 security.' },
-  { id: 'pl2', name: 'Houston Terminal', type: 'DEPOT', address: '4500 Port Access Rd, Houston TX 77001', lat: 29.7604, lng: -95.3698, notes: 'Secondary yard. Contact: Mike (713) 555-0100' },
-  { id: 'pl3', name: 'Love\'s Travel Stop #441', type: 'FUEL_STOP', address: '9100 I-20 Service Rd, Abilene TX 79601', lat: 32.4487, lng: -99.7331, notes: 'Preferred diesel stop. DEF available.' },
-  { id: 'pl4', name: 'Dallas Truck & Engine Center', type: 'REPAIR_SHOP', address: '7800 Industrial Pkwy, Dallas TX 75237', lat: 32.6881, lng: -96.8960, notes: 'Primary vendor. Rate: $145/hr.' },
-  { id: 'pl5', name: 'TX DOT Inspection Station I-35', type: 'DOT_STATION', address: 'I-35 Northbound, Gainesville TX 76240', lat: 33.6357, lng: -97.1336, notes: 'Fixed scale. Weigh 80k lbs limit.' },
-  { id: 'pl6', name: 'Amazon DSP - Coppell FC', type: 'CUSTOMER_SITE', address: '1200 Champion Dr, Coppell TX 75019', lat: 32.9546, lng: -97.0139, notes: 'Drop & hook. No wait time usually.' }
-];
+export const initialFleetGroups: FleetGroupConfig[] = [];
 
-export const initialDocuments: FleetDocument[] = [
-  { id: 'doc1', assetId: 'a1', name: 'Progressive Insurance Card 2026', type: 'INSURANCE_CARD', fileUrl: 'https://example.com/docs/ins-a1-2026.pdf', uploadedBy: 'John Admin', uploadedAt: '2026-01-05T10:00:00Z', expiresAt: '2026-08-01' },
-  { id: 'doc2', assetId: 'a1', name: 'TX Registration - Tractor #101', type: 'REGISTRATION', fileUrl: 'https://example.com/docs/reg-a1.pdf', uploadedBy: 'John Admin', uploadedAt: '2026-01-10T09:00:00Z', expiresAt: '2027-01-31' },
-  { id: 'doc3', assetId: 'a1', name: 'DOT Annual Inspection Cert', type: 'INSPECTION_CERT', fileUrl: 'https://example.com/docs/dot-a1.pdf', uploadedBy: 'John Admin', uploadedAt: '2026-06-01T08:00:00Z', expiresAt: '2026-06-20' },
-  { id: 'doc4', assetId: 'a3', name: 'Freightliner Cascadia Reg', type: 'REGISTRATION', fileUrl: 'https://example.com/docs/reg-a3.pdf', uploadedBy: 'Sarah Manager', uploadedAt: '2026-03-01T14:00:00Z', expiresAt: '2026-06-12' },
-  { id: 'doc5', assetId: 'a2', name: 'Trailer Annual Inspection 2025', type: 'INSPECTION_CERT', fileUrl: 'https://example.com/docs/trailer-insp.pdf', uploadedBy: 'Dave Mechanic', uploadedAt: '2025-11-20T11:00:00Z', expiresAt: '2026-11-20' }
-];
+export const initialLabels: LabelTagConfig[] = [];
 
-export const initialWarranties: Warranty[] = [
-  { id: 'war1', assetId: 'a1', componentName: 'Cummins X15 Engine', provider: 'Cummins Inc.', warrantyNumber: 'CUM-2021-88901', startDate: '2021-03-15', expiryDate: '2026-03-15', coverageDetails: '5yr / 500k mi powertrain warranty. Covers engine block, heads, injectors.', status: 'EXPIRED' },
-  { id: 'war2', assetId: 'a1', componentName: 'Eaton Fuller 18-Spd Transmission', provider: 'Eaton Corp', warrantyNumber: 'EAT-TX-2021-44120', startDate: '2021-03-15', expiryDate: '2027-03-15', coverageDetails: '6yr extended coverage. Covers gears, clutch pack, PTO shaft.', status: 'ACTIVE' },
-  { id: 'war3', assetId: 'a3', componentName: 'Bendix Air Brakes System', provider: 'Bendix Commercial', warrantyNumber: 'BDX-2022-90012', startDate: '2022-07-20', expiryDate: '2026-07-20', coverageDetails: '4yr coverage. Covers ABS ECU, chambers, valves.', status: 'EXPIRING_SOON' },
-  { id: 'war4', assetId: 'a2', componentName: 'Utility Trailer Frame & Body', provider: 'Utility Trailer Mfg', warrantyNumber: 'UTL-2020-11023', startDate: '2020-01-10', expiryDate: '2028-01-10', coverageDetails: '8yr structural warranty. Covers frame welds, cross members, landing gear.', status: 'ACTIVE' }
-];
+export const initialSavedViews: SavedViewConfig[] = [];
 
+export const initialSandboxes: SandboxConfig[] = [];
 
 // Helper to initialize local storage
 export const getStore = <T>(key: string, initial: T[]): T[] => {
@@ -510,10 +999,33 @@ export const getStore = <T>(key: string, initial: T[]): T[] => {
     localStorage.setItem(key, JSON.stringify(initial));
     return initial;
   }
-  return JSON.parse(val);
+  try {
+    return JSON.parse(val);
+  } catch (e) {
+    return initial;
+  }
 };
 
 export const setStore = <T>(key: string, data: T[]): void => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(key, JSON.stringify(data));
+};
+
+export const getSingleStore = <T>(key: string, initial: T): T => {
+  if (typeof window === 'undefined') return initial;
+  const val = localStorage.getItem(key);
+  if (!val) {
+    localStorage.setItem(key, JSON.stringify(initial));
+    return initial;
+  }
+  try {
+    return JSON.parse(val);
+  } catch (e) {
+    return initial;
+  }
+};
+
+export const setSingleStore = <T>(key: string, data: T): void => {
   if (typeof window === 'undefined') return;
   localStorage.setItem(key, JSON.stringify(data));
 };
@@ -530,6 +1042,7 @@ export const getMockDb = () => {
     workOrders: getStore('workOrders', initialWorkOrders),
     purchaseOrders: getStore<PurchaseOrder>('purchaseOrders', []),
     renewalAlerts: getStore('renewalAlerts', initialRenewalAlerts),
+    complianceRenewals: getStore('complianceRenewals', initialComplianceRenewals),
     fuelLogs: getStore('fuelLogs', initialFuelLogs),
     tollRecords: getStore('tollRecords', initialTollRecords),
     dotInspections: getStore('dotInspections', initialDOTInspections),
@@ -541,6 +1054,7 @@ export const getMockDb = () => {
     accidentClaims: getStore('accidentClaims', initialAccidentClaims),
     assignments: getStore('assignments', initialAssignments),
     tireReadings: getStore('tireReadings', initialTireReadings),
+    brakeReadings: getStore('brakeReadings', initialBrakeReadings),
     expenseRecords: getStore('expenseRecords', initialExpenseRecords),
     replacementAnalysis: getStore('replacementAnalysis', initialReplacementAnalysis),
     issues: getStore('issues', initialIssues),
@@ -548,437 +1062,46 @@ export const getMockDb = () => {
     parts: getStore('parts', initialParts),
     places: getStore('places', initialPlaces),
     documents: getStore('documents', initialDocuments),
-    warranties: getStore('warranties', initialWarranties)
+    warranties: getStore('warranties', initialWarranties),
+    billingProfile: getSingleStore('billingProfile', initialBillingProfile),
+    primaryPlan: getSingleStore('primaryPlan', initialPrimaryPlan),
+    generalSettings: getSingleStore('generalSettings', initialGeneralSettings),
+    vehicleStatuses: getStore('vehicleStatuses', initialVehicleStatuses),
+    vehicleTypes: getStore('vehicleTypes', initialVehicleTypes),
+    externalVehicleIds: getStore('externalVehicleIds', initialExternalVehicleIds),
+    expenseSettings: getSingleStore('expenseSettings', initialExpenseSettings),
+    inspectionSettings: getSingleStore('inspectionSettings', initialInspectionSettings),
+    issuePriorities: getStore('issuePriorities', initialIssuePriorities),
+    faultRules: getStore('faultRules', initialFaultRules),
+    reminderSettings: getSingleStore('reminderSettings', initialReminderSettings),
+    vehicleRenewalTypes: getStore('vehicleRenewalTypes', initialVehicleRenewalTypes),
+    contactRenewalTypes: getStore('contactRenewalTypes', initialContactRenewalTypes),
+    maintenanceSettings: getSingleStore('maintenanceSettings', initialMaintenanceSettings),
+    reasonForRepairCodes: getStore('reasonForRepairCodes', initialReasonForRepairCodes),
+    repairPriorityCodes: getStore('repairPriorityCodes', initialRepairPriorityCodes),
+    vmrsCodes: getStore('vmrsCodes', initialVmrsCodes),
+    smartAssessmentConfig: getSingleStore('smartAssessmentConfig', initialSmartAssessmentConfig),
+    partLocations: getStore('partLocations', initialPartLocations),
+    partCategories: getStore('partCategories', initialPartCategories),
+    partManufacturers: getStore('partManufacturers', initialPartManufacturers),
+    measurementUnits: getStore('measurementUnits', initialMeasurementUnits),
+    fuelEnergySettings: getSingleStore('fuelEnergySettings', initialFuelEnergySettings),
+    fuelTypes: getStore('fuelTypes', initialFuelTypes),
+    savedReports: getStore('savedReports', initialSavedReports),
+    securitySettings: getSingleStore('securitySettings', initialSecuritySettings),
+    roleDefinitions: getStore('roleDefinitions', initialRoleDefinitions),
+    recordSets: getStore('recordSets', initialRecordSets),
+    aiAdvisorSettings: getSingleStore('aiAdvisorSettings', initialAIAdvisorSettings),
+    aiHealthInsights: getStore('aiHealthInsights', initialAIHealthInsights),
+    webhooks: getStore('webhooks', initialWebhooks),
+    integrationLinks: getStore('integrationLinks', initialIntegrationLinks),
+    samlSettings: getSingleStore('samlSettings', initialSAMLSettings),
+    customFields: getStore('customFields', initialCustomFields),
+    fleetGroups: getStore('fleetGroups', initialFleetGroups),
+    labels: getStore('labels', initialLabels),
+    savedViews: getStore('savedViews', initialSavedViews),
+    sandboxes: getStore('sandboxes', initialSandboxes)
   };
 };
 
-export const mutators = {
-  // Authentication
-  login: (email: string): User | null => {
-    const db = getMockDb();
-    const u = db.users.find(x => x.email.toLowerCase() === email.toLowerCase());
-    return u || null;
-  },
-
-  // eDVIR Inspection
-  submitInspection: (data: { assetId: string; driverName: string; status: 'PASSED' | 'FAILED'; odometer: number; checklistJson: any; notes?: string }) => {
-    const db = getMockDb();
-    const inspection: EDVIRInspection = {
-      id: 'insp-' + Math.random().toString(36).substr(2, 9),
-      createdAt: new Date().toISOString(),
-      ...data
-    };
-    db.inspections.unshift(inspection);
-    setStore('inspections', db.inspections);
-
-    // Update asset odometer & status
-    const assets = db.assets.map(a => {
-      if (a.id === data.assetId) {
-        let status = a.status;
-        if (data.status === 'FAILED') {
-          status = 'INOPERABLE';
-          // Generate notification
-          mutators.addNotification('COMPLIANCE', `Inspection Failed: ${a.name}`, `Driver ${data.driverName} failed inspections checklist: ${data.notes || 'no details'}`);
-        }
-        return {
-          ...a,
-          odometer: Math.max(a.odometer, data.odometer),
-          status
-        };
-      }
-      return a;
-    });
-    setStore('assets', assets);
-
-    // Evaluate PM
-    mutators.syncPMSchedules(data.assetId, data.odometer);
-    mutators.logAudit(data.driverName, 'CREATE', 'Inspection', inspection.id);
-    return inspection;
-  },
-
-  // Service Requests & Work Orders
-  submitServiceRequest: (data: { assetId: string; driverName: string; description: string; mediaUrls: string[] }) => {
-    const db = getMockDb();
-    const req: ServiceRequest = {
-      id: 'req-' + Math.random().toString(36).substr(2, 9),
-      createdAt: new Date().toISOString(),
-      status: 'PENDING',
-      ...data
-    };
-    db.serviceRequests.unshift(req);
-    setStore('serviceRequests', db.serviceRequests);
-
-    mutators.addNotification('WORK_ORDER', `New Driver Request`, `Request reported for asset. Reason: "${data.description}"`);
-    mutators.logAudit(data.driverName, 'CREATE', 'ServiceRequest', req.id);
-    return req;
-  },
-
-  approveRequest: (requestId: string, details: { type: 'INTERNAL' | 'EXTERNAL'; priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'EMERGENCY'; description: string; assignedMechanicId?: string; vendorId?: string }, userName: string) => {
-    const db = getMockDb();
-    
-    // Update request
-    const reqs = db.serviceRequests.map(r => r.id === requestId ? { ...r, status: 'APPROVED' as const } : r);
-    setStore('serviceRequests', reqs);
-
-    const req = db.serviceRequests.find(r => r.id === requestId);
-    if (!req) return null;
-
-    // Create Work Order
-    const wo: WorkOrder = {
-      id: 'wo-' + Math.random().toString(36).substr(2, 9),
-      serviceRequestId: requestId,
-      assetId: req.assetId,
-      type: details.type,
-      priority: details.priority,
-      description: details.description,
-      assignedMechanicId: details.type === 'INTERNAL' ? details.assignedMechanicId : null,
-      vendorId: details.type === 'EXTERNAL' ? details.vendorId : null,
-      status: 'OPEN',
-      laborCost: 0,
-      partsCost: 0,
-      totalCost: 0,
-      createdAt: new Date().toISOString()
-    };
-    db.workOrders.unshift(wo);
-    setStore('workOrders', db.workOrders);
-
-    // If external, create PO
-    if (details.type === 'EXTERNAL' && details.vendorId) {
-      const po: PurchaseOrder = {
-        id: 'po-' + Math.random().toString(36).substr(2, 9),
-        workOrderId: wo.id,
-        vendorId: details.vendorId,
-        amount: 0,
-        status: 'PENDING',
-        createdAt: new Date().toISOString()
-      };
-      db.purchaseOrders.unshift(po);
-      setStore('purchaseOrders', db.purchaseOrders);
-    }
-
-    // Update asset status
-    const assets = db.assets.map(a => a.id === req.assetId ? { ...a, status: 'INOPERABLE' as const } : a);
-    setStore('assets', assets);
-
-    mutators.addNotification('WORK_ORDER', 'Work Order Created', `WO issued for repair: ${details.description}`);
-    mutators.logAudit(userName, 'CREATE', 'WorkOrder', wo.id);
-    return wo;
-  },
-
-  updateWorkOrder: (id: string, data: { status?: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED'; laborCost?: number; partsCost?: number }, userName: string) => {
-    const db = getMockDb();
-    
-    const wos = db.workOrders.map(wo => {
-      if (wo.id === id) {
-        const labor = data.laborCost ?? wo.laborCost;
-        const parts = data.partsCost ?? wo.partsCost;
-        const totalCost = labor + parts;
-        const status = data.status ?? wo.status;
-
-        const updated = {
-          ...wo,
-          status,
-          laborCost: labor,
-          partsCost: parts,
-          totalCost,
-          completedAt: status === 'COMPLETED' ? new Date().toISOString() : wo.completedAt
-        };
-
-        // If completed, check asset status recovery
-        if (status === 'COMPLETED') {
-          // Recover asset
-          setTimeout(() => {
-            const innerDb = getMockDb();
-            const activeWosCount = innerDb.workOrders.filter(w => w.assetId === wo.assetId && w.id !== id && w.status !== 'COMPLETED').length;
-            if (activeWosCount === 0) {
-              const freshAssets = innerDb.assets.map(a => a.id === wo.assetId ? { ...a, status: 'OPERABLE' as const } : a);
-              setStore('assets', freshAssets);
-            }
-          }, 50);
-
-          // Update PO amount if external
-          if (wo.type === 'EXTERNAL') {
-            const pos = getMockDb().purchaseOrders.map(p => p.workOrderId === id ? { ...p, amount: totalCost, status: 'APPROVED' as const } : p);
-            setStore('purchaseOrders', pos);
-          }
-        }
-
-        return updated;
-      }
-      return wo;
-    });
-
-    setStore('workOrders', wos);
-    mutators.logAudit(userName, 'UPDATE', 'WorkOrder', id);
-  },
-
-  // PM Schedule sync
-  syncPMSchedules: (assetId: string, currentOdometer: number) => {
-    const db = getMockDb();
-    const schedules = db.pmSchedules.map(s => {
-      if (s.assetId === assetId) {
-        const remainingMileage = s.nextDueOdometer - currentOdometer;
-        const remainingDays = (new Date(s.nextDueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
-        
-        let status: 'COMPLIANT' | 'DUE' | 'OVERDUE' = 'COMPLIANT';
-        if (remainingMileage <= 0 || remainingDays <= 0) {
-          status = 'OVERDUE';
-        } else if (remainingMileage <= 1000 || remainingDays <= 15) {
-          status = 'DUE';
-        }
-
-        if (status !== s.status && (status === 'OVERDUE' || status === 'DUE')) {
-          mutators.addNotification('PM_ALERT', 'PM Service Alert', `PM schedule is now ${status}. Sync checklist.`);
-        }
-
-        return { ...s, status };
-      }
-      return s;
-    });
-    setStore('pmSchedules', schedules);
-  },
-
-  performPM: (scheduleId: string, odometer: number, userName: string) => {
-    const db = getMockDb();
-    const schedules = db.pmSchedules.map(s => {
-      if (s.id === scheduleId) {
-        const template = db.pmTemplates.find(t => t.id === s.templateId);
-        const triggerMileage = template ? template.triggerMileage : 10000;
-        const triggerDays = template ? template.triggerDays : 90;
-
-        return {
-          ...s,
-          lastServiceOdometer: odometer,
-          lastServiceDate: new Date().toISOString().split('T')[0],
-          nextDueOdometer: odometer + triggerMileage,
-          nextDueDate: new Date(Date.now() + triggerDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          status: 'COMPLIANT' as const
-        };
-      }
-      return s;
-    });
-    setStore('pmSchedules', schedules);
-    
-    mutators.logAudit(userName, 'UPDATE', 'PMPerformance', scheduleId);
-  },
-
-  // Emergency Breakdowns
-  createEmergencyTicket: (data: { assetId: string; reporterName: string; description: string; gpsLatitude: number; gpsLongitude: number }) => {
-    const db = getMockDb();
-    
-    // Find closest vendor
-    let closestVendor = db.vendors[0];
-    const ticket: EmergencyTicket = {
-      id: 'emerg-' + Math.random().toString(36).substr(2, 9),
-      createdAt: new Date().toISOString(),
-      status: 'OPEN',
-      assignedVendorId: closestVendor ? closestVendor.id : null,
-      mechanicEta: new Date(Date.now() + 35 * 60 * 1000).toISOString(), // 35 min ETA
-      downtimeHours: 0,
-      ...data
-    };
-    db.emergencyTickets.unshift(ticket);
-    setStore('emergencyTickets', db.emergencyTickets);
-
-    // Update asset
-    const assets = db.assets.map(a => a.id === data.assetId ? { ...a, status: 'INOPERABLE' as const } : a);
-    setStore('assets', assets);
-
-    mutators.addNotification('BREAKDOWN', `Breakdown: Tractor Needs Dispatch`, `Emergency breakdown reported. Vendor dispatched: ${closestVendor?.name}`);
-    mutators.logAudit(data.reporterName, 'CREATE', 'EmergencyTicket', ticket.id);
-    return ticket;
-  },
-
-  updateEmergencyTicket: (id: string, data: { status: 'OPEN' | 'DISPATCHED' | 'COMPLETED'; downtimeHours: number }, userName: string) => {
-    const db = getMockDb();
-    const tickets = db.emergencyTickets.map(t => {
-      if (t.id === id) {
-        if (data.status === 'COMPLETED') {
-          // Recover asset
-          setTimeout(() => {
-            const innerDb = getMockDb();
-            const freshAssets = innerDb.assets.map(a => a.id === t.assetId ? { ...a, status: 'OPERABLE' as const } : a);
-            setStore('assets', freshAssets);
-          }, 50);
-        }
-        return {
-          ...t,
-          status: data.status,
-          downtimeHours: data.downtimeHours
-        };
-      }
-      return t;
-    });
-    setStore('emergencyTickets', tickets);
-    mutators.logAudit(userName, 'UPDATE', 'EmergencyTicket', id);
-  },
-
-  // ELD Odometer and Fault Codes simulator
-  telematicsOdometerUpdate: (assetId: string, odometer: number) => {
-    const db = getMockDb();
-    const assets = db.assets.map(a => a.id === assetId ? { ...a, odometer } : a);
-    setStore('assets', assets);
-
-    mutators.syncPMSchedules(assetId, odometer);
-  },
-
-  telematicsDtcCode: (assetId: string, source: string, code: string, desc: string) => {
-    const db = getMockDb();
-    
-    // Add fault code
-    const fault: FaultCode = {
-      id: 'fc-' + Math.random().toString(36).substr(2, 9),
-      assetId,
-      source,
-      code,
-      description: desc,
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString()
-    };
-    db.faultCodes.unshift(fault);
-    setStore('faultCodes', db.faultCodes);
-
-    // Set asset to NEEDS_ATTENTION
-    const assets = db.assets.map(a => a.id === assetId ? { ...a, status: 'NEEDS_ATTENTION' as const } : a);
-    setStore('assets', assets);
-
-    // Auto-create Work Order
-    const wo: WorkOrder = {
-      id: 'wo-' + Math.random().toString(36).substr(2, 9),
-      assetId,
-      priority: 'MEDIUM',
-      type: 'INTERNAL',
-      status: 'OPEN',
-      description: `Telematics Auto WO: Ingested DTC fault code ${code} - ${desc}`,
-      laborCost: 0,
-      partsCost: 0,
-      totalCost: 0,
-      createdAt: new Date().toISOString()
-    };
-    db.workOrders.unshift(wo);
-    setStore('workOrders', db.workOrders);
-
-    // Update fault code with wo id
-    const faults = db.faultCodes.map(f => f.id === fault.id ? { ...f, workOrderId: wo.id } : f);
-    setStore('faultCodes', faults);
-
-    mutators.addNotification('WORK_ORDER', `Telematics Fault Ingested`, `Check engine code ${code} surfaced on engine telemetry.`);
-    mutators.logAudit('ELD API', 'CREATE', 'FaultCode', fault.id);
-  },
-
-  // Accidents Claims
-  submitAccidentClaim: (data: { assetId: string; driverName: string; policeReportNumber: string; statement: string; thirdPartyDetails: string; claimDate: string; insurancePayout: number; actualRepairCost: number }) => {
-    const db = getMockDb();
-    const claim: AccidentClaim = {
-      id: 'claim-' + Math.random().toString(36).substr(2, 9),
-      status: 'OPEN',
-      ...data
-    };
-    db.accidentClaims.unshift(claim);
-    setStore('accidentClaims', db.accidentClaims);
-
-    // Create a work order for the repair
-    const wo: WorkOrder = {
-      id: 'wo-' + Math.random().toString(36).substr(2, 9),
-      assetId: data.assetId,
-      priority: 'HIGH',
-      type: 'INTERNAL',
-      status: 'OPEN',
-      description: `Accident Collision Repairs. Police Report: ${data.policeReportNumber}`,
-      laborCost: 0,
-      partsCost: data.actualRepairCost,
-      totalCost: data.actualRepairCost,
-      createdAt: new Date().toISOString()
-    };
-    db.workOrders.unshift(wo);
-    setStore('workOrders', db.workOrders);
-
-    mutators.addNotification('COMPLIANCE', `Accident Claim Filed`, `Claim logged for asset with report #${data.policeReportNumber}`);
-    mutators.logAudit(data.driverName, 'CREATE', 'AccidentClaim', claim.id);
-  },
-
-  // DOT Roadside
-  submitDotAudit: (data: { assetId: string; result: 'CLEAN' | 'VIOLATION'; violationsJson: string[] }, userName: string) => {
-    const db = getMockDb();
-    const inspection: DOTInspection = {
-      id: 'dot-' + Math.random().toString(36).substr(2, 9),
-      inspectionDate: new Date().toISOString().split('T')[0],
-      createdAt: new Date().toISOString(),
-      ...data
-    };
-    db.dotInspections.unshift(inspection);
-    setStore('dotInspections', db.dotInspections);
-
-    if (data.result === 'VIOLATION') {
-      // Set asset status to INOPERABLE
-      const assets = db.assets.map(a => a.id === data.assetId ? { ...a, status: 'INOPERABLE' as const } : a);
-      setStore('assets', assets);
-
-      // Create high priority work order
-      const wo: WorkOrder = {
-        id: 'wo-' + Math.random().toString(36).substr(2, 9),
-        assetId: data.assetId,
-        priority: 'HIGH',
-        type: 'INTERNAL',
-        status: 'OPEN',
-        description: `DOT Roadside Violation Repairs: ${data.violationsJson.join(', ')}`,
-        laborCost: 0,
-        partsCost: 0,
-        totalCost: 0,
-        dotViolationId: inspection.id,
-        createdAt: new Date().toISOString()
-      };
-      db.workOrders.unshift(wo);
-      setStore('workOrders', db.workOrders);
-
-      mutators.addNotification('COMPLIANCE', `DOT Violation Alert`, `Infraction reported. High-priority WO generated.`);
-    }
-
-    mutators.logAudit(userName, 'CREATE', 'DOTInspection', inspection.id);
-  },
-
-  // Dismiss renewal
-  dismissRenewalAlert: (id: string, userName: string) => {
-    const db = getMockDb();
-    const alerts = db.renewalAlerts.map(a => a.id === id ? { ...a, status: 'DISMISSED' as const } : a);
-    setStore('renewalAlerts', alerts);
-    mutators.logAudit(userName, 'UPDATE', 'RenewalAlert', id);
-  },
-
-  // Asset Status Admin Override
-  overrideAssetStatus: (id: string, status: 'OPERABLE' | 'NEEDS_ATTENTION' | 'INOPERABLE', userName: string) => {
-    const db = getMockDb();
-    const assets = db.assets.map(a => a.id === id ? { ...a, status } : a);
-    setStore('assets', assets);
-    mutators.logAudit(userName, 'OVERRIDE', 'AssetStatus', id);
-  },
-
-  // Helper logs
-  logAudit: (userName: string, action: string, entityName: string, entityId: string) => {
-    const db = getMockDb();
-    const audit: AuditLog = {
-      id: 'au-' + Math.random().toString(36).substr(2, 9),
-      userName,
-      action,
-      entityName,
-      entityId,
-      timestamp: new Date().toISOString()
-    };
-    db.auditLogs.unshift(audit);
-    setStore('auditLogs', db.auditLogs);
-  },
-
-  addNotification: (type: 'WORK_ORDER' | 'PM_ALERT' | 'BREAKDOWN' | 'COMPLIANCE', title: string, message: string) => {
-    const db = getMockDb();
-    const notif: SystemNotification = {
-      id: 'n-' + Math.random().toString(36).substr(2, 9),
-      type,
-      title,
-      message,
-      timestamp: new Date().toISOString(),
-      read: false
-    };
-    db.notifications.unshift(notif);
-    setStore('notifications', db.notifications);
-  }
-};
+export const mutators = {};

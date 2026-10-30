@@ -145,9 +145,66 @@ export class WorkordersService {
         vendor: true,
         purchaseOrder: true,
         serviceRequest: true,
+        partsUsed: { include: { part: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async createWorkOrder(data: {
+    assetId: string;
+    priority: WorkOrderPriority;
+    type: WorkOrderType;
+    description: string;
+    assignedMechanicId?: string;
+    vendorId?: string;
+  }, userId?: string) {
+    const asset = await this.prisma.asset.findUnique({ where: { id: data.assetId } });
+    if (!asset) throw new NotFoundException('Asset not found');
+
+    const workOrder = await this.prisma.workOrder.create({
+      data: {
+        assetId: data.assetId,
+        priority: data.priority,
+        type: data.type,
+        status: WorkOrderStatus.OPEN,
+        description: data.description,
+        assignedMechanicId: data.assignedMechanicId,
+        vendorId: data.vendorId,
+      },
+      include: {
+        asset: true,
+        assignedMechanic: { select: { id: true, name: true, email: true } },
+        vendor: true,
+      },
+    });
+
+    if (asset.status === AssetStatus.OPERABLE) {
+      await this.prisma.asset.update({
+        where: { id: data.assetId },
+        data: { status: AssetStatus.NEEDS_ATTENTION },
+      });
+    }
+
+    this.notificationsService.emit({
+      type: 'WORK_ORDER',
+      title: `Work Order Created: ${asset.name}`,
+      message: `Priority: ${data.priority}. ${data.description}`,
+      assetId: data.assetId,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (userId) {
+      await this.auditService.logChange({
+        userId,
+        action: 'CREATE',
+        entityName: 'WorkOrder',
+        entityId: workOrder.id,
+        afterState: { id: workOrder.id, assetId: data.assetId, priority: data.priority },
+      });
+    }
+
+    return workOrder;
   }
 
   async updateWorkOrder(id: string, data: {
@@ -231,5 +288,115 @@ export class WorkordersService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  // WORK ORDER PARTS (LINE ITEMS)
+  async addPartLineItem(workOrderId: string, partId: string, quantity: number, userId?: string) {
+    const workOrder = await this.prisma.workOrder.findUnique({ where: { id: workOrderId } });
+    if (!workOrder) throw new NotFoundException('Work order not found');
+
+    const part = await this.prisma.part.findUnique({ where: { id: partId } });
+    if (!part) throw new NotFoundException('Part not found');
+
+    if (part.stockQty < quantity) {
+      throw new BadRequestException(`Insufficient stock for part "${part.name}". Available: ${part.stockQty}, Requested: ${quantity}`);
+    }
+
+    const unitCost = part.unitCost;
+    const lineTotal = unitCost * quantity;
+
+    // Transactionally create line item and deduct stock
+    const result = await this.prisma.$transaction(async (tx) => {
+      const lineItem = await tx.workOrderPart.create({
+        data: {
+          workOrderId,
+          partId,
+          quantity,
+          unitCost,
+          totalCost: lineTotal,
+        },
+        include: { part: true },
+      });
+
+      const updatedPart = await tx.part.update({
+        where: { id: partId },
+        data: { stockQty: part.stockQty - quantity },
+      });
+
+      const newPartsCost = workOrder.partsCost + lineTotal;
+      const newTotalCost = workOrder.laborCost + newPartsCost;
+
+      const updatedWo = await tx.workOrder.update({
+        where: { id: workOrderId },
+        data: {
+          partsCost: newPartsCost,
+          totalCost: newTotalCost,
+        },
+        include: { partsUsed: { include: { part: true } }, asset: true },
+      });
+
+      // Update PO amount if external
+      if (updatedWo.type === WorkOrderType.EXTERNAL) {
+        await tx.purchaseOrder.updateMany({
+          where: { workOrderId },
+          data: { amount: newTotalCost },
+        });
+      }
+
+      return { lineItem, updatedWo, updatedPart };
+    });
+
+    // Check low stock
+    if (result.updatedPart.stockQty <= result.updatedPart.reorderLevel) {
+      this.notificationsService.emit({
+        type: 'PM_ALERT',
+        title: 'Low Stock Alert',
+        message: `Part ${result.updatedPart.name} (${result.updatedPart.partNumber}) has reached reorder threshold (${result.updatedPart.stockQty} remaining).`,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    await this.auditService.logChange({
+      userId,
+      action: 'USE_PART',
+      entityName: 'WorkOrder',
+      entityId: workOrderId,
+      afterState: { partId, quantity, unitCost, totalCost: lineTotal },
+    });
+
+    return result.updatedWo;
+  }
+
+  async removePartLineItem(lineItemId: string, userId?: string) {
+    const lineItem = await this.prisma.workOrderPart.findUnique({
+      where: { id: lineItemId },
+      include: { workOrder: true },
+    });
+    if (!lineItem) throw new NotFoundException('Work order part line item not found');
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.part.update({
+        where: { id: lineItem.partId },
+        data: { stockQty: { increment: lineItem.quantity } },
+      });
+
+      await tx.workOrderPart.delete({ where: { id: lineItemId } });
+
+      const newPartsCost = Math.max(0, lineItem.workOrder.partsCost - lineItem.totalCost);
+      const newTotalCost = lineItem.workOrder.laborCost + newPartsCost;
+
+      const updatedWo = await tx.workOrder.update({
+        where: { id: lineItem.workOrderId },
+        data: {
+          partsCost: newPartsCost,
+          totalCost: newTotalCost,
+        },
+        include: { partsUsed: { include: { part: true } } },
+      });
+
+      return updatedWo;
+    });
+
+    return result;
   }
 }

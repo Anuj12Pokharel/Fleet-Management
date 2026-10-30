@@ -21,68 +21,17 @@ import {
   Wifi, WifiOff, Route, X, Send, Shield,
 } from 'lucide-react';
 
-// ─── Mock data for demo mode (no API credentials) ────────────────────────────
+// ─── Real data structures (empty fallbacks) ────────────────────────────
 
-const MOCK_TRIPS = [
-  { id: 'trip-demo-001', label: 'Trip #1001 — Dallas → Houston', origin: { lat: 32.7767, lng: -96.797 }, dest: { lat: 29.7604, lng: -95.3698 } },
-  { id: 'trip-demo-002', label: 'Trip #1002 — Austin → San Antonio', origin: { lat: 30.2672, lng: -97.7431 }, dest: { lat: 29.4241, lng: -98.4936 } },
-];
+const MOCK_TRIPS: Array<{ id: string; label: string; origin: { lat: number; lng: number }; dest: { lat: number; lng: number } }> = [];
 
-const MOCK_DRIVERS: Record<string, { name: string; phone: string }> = {
-  'driver-demo-001': { name: 'James Rodriguez', phone: '(214) 555-0192' },
-  'driver-demo-002': { name: 'Maria Santos', phone: '(512) 555-0347' },
-  'driver-demo-003': { name: 'Kevin Liu', phone: '(713) 555-0881' },
-};
+const MOCK_DRIVERS: Record<string, { name: string; phone: string }> = {};
 
-function generateMockPositions(tripId: string, tick: number): DriverPosition[] {
-  const trip = MOCK_TRIPS.find(t => t.id === tripId);
-  if (!trip) return [];
-
-  const drivers = tripId === 'trip-demo-001'
-    ? ['driver-demo-001', 'driver-demo-002']
-    : ['driver-demo-003'];
-
-  return drivers.map((driverId, i) => {
-    const progress = ((tick * 0.003) + i * 0.2) % 1;
-    const lat = trip.origin.lat + (trip.dest.lat - trip.origin.lat) * progress;
-    const lng = trip.origin.lng + (trip.dest.lng - trip.origin.lng) * progress;
-    const isStale = driverId === 'driver-demo-002';
-    return {
-      driverId,
-      tripId,
-      latitude: lat + (Math.random() - 0.5) * 0.005,
-      longitude: lng + (Math.random() - 0.5) * 0.005,
-      speed: isStale ? 0 : Math.round(55 + Math.random() * 15),
-      heading: 180,
-      recordedAt: new Date(Date.now() - (isStale ? 30 * 60000 : Math.random() * 120000)).toISOString(),
-      isStale,
-      minutesSinceLastPing: isStale ? 31 : Math.round(Math.random() * 3),
-      nextStop: {
-        address: trip.dest.lat > 30 ? '1200 Main St, Houston TX 77002' : '123 Commerce St, San Antonio TX 78201',
-        appointmentTime: new Date(Date.now() + (2 - progress) * 3600000).toISOString(),
-        distanceMiles: Math.round((1 - progress) * 240),
-        etaMinutes: Math.round((1 - progress) * 190),
-      },
-      driver: { id: driverId, name: MOCK_DRIVERS[driverId].name, phone: MOCK_DRIVERS[driverId].phone },
-    };
-  });
+function generateMockPositions(_tripId: string, _tick: number): DriverPosition[] {
+  return [];
 }
 
-const MOCK_LOGS: TrackingLog[] = [
-  {
-    id: 'log-001', tripId: 'trip-demo-001', issueType: 'DELAY',
-    description: 'Traffic jam on I-45, ETA pushed by 45 minutes.',
-    isResolved: false, brokerNotified: true, driverNotified: false,
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-  },
-  {
-    id: 'log-002', tripId: 'trip-demo-001', issueType: 'MECHANICAL',
-    description: 'Low tire pressure warning on rear axle. Driver inspecting.',
-    isResolved: true, brokerNotified: false, driverNotified: true,
-    createdAt: new Date(Date.now() - 7200000).toISOString(),
-    resolvedAt: new Date(Date.now() - 6000000).toISOString(),
-  },
-];
+const MOCK_LOGS: TrackingLog[] = [];
 
 // ─── Issue type options ───────────────────────────────────────────────────────
 
@@ -116,7 +65,7 @@ export default function DriverTrackingMap({ isAdmin, currentDriverId }: Props) {
   const demoMode = !tenantId || !token;
 
   const [MapComponents, setMapComponents] = useState<any>(null);
-  const [selectedTripId, setSelectedTripId] = useState<string>(MOCK_TRIPS[0].id);
+  const [selectedTripId, setSelectedTripId] = useState<string>(MOCK_TRIPS[0]?.id || '');
   const [positions, setPositions] = useState<DriverPosition[]>([]);
   const [logs, setLogs] = useState<TrackingLog[]>([]);
   const [eta, setEta] = useState<EtaResponse | null>(null);
@@ -219,7 +168,11 @@ export default function DriverTrackingMap({ isAdmin, currentDriverId }: Props) {
     setShowReplay(true);
     try {
       if (demoMode) {
-        const trip = MOCK_TRIPS.find(t => t.id === selectedTripId)!;
+        const trip = MOCK_TRIPS.find(t => t.id === selectedTripId);
+        if (!trip) {
+          setRouteHistory([]);
+          return;
+        }
         const pts: LocationHistoryPoint[] = Array.from({ length: 30 }, (_, i) => {
           const p = i / 29;
           return {
@@ -251,21 +204,11 @@ export default function DriverTrackingMap({ isAdmin, currentDriverId }: Props) {
     e.preventDefault();
     setLogSubmitting(true);
     try {
-      if (demoMode) {
-        const fake: TrackingLog = {
-          id: 'log-' + Math.random().toString(36).substr(2, 6),
-          tripId: selectedTripId, issueType: logIssueType, description: logDesc,
-          isResolved: false, brokerNotified: logBroker, driverNotified: logDriver,
-          createdAt: new Date().toISOString(),
-        };
-        setLogs(prev => [fake, ...prev]);
-      } else {
-        const created = await createTrackingLog({
-          tripId: selectedTripId, issueType: logIssueType, description: logDesc,
-          brokerNotified: logBroker, driverNotified: logDriver,
-        });
-        setLogs(prev => [created, ...prev]);
-      }
+      const created = await createTrackingLog({
+        tripId: selectedTripId, issueType: logIssueType, description: logDesc,
+        brokerNotified: logBroker, driverNotified: logDriver,
+      });
+      setLogs(prev => [created, ...prev]);
       setLogDesc(''); setLogIssueType('DELAY'); setLogBroker(false); setLogDriver(false);
       setShowCreateLog(false);
     } catch (e: any) {

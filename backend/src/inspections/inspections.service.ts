@@ -97,4 +97,64 @@ export class InspectionsService {
       checklistJson: JSON.parse(inspection.checklistJson),
     };
   }
+
+  async mechanicSignOff(id: string, data: { mechanicName: string; notes?: string; clearInoperable?: boolean }, userId?: string) {
+    const inspection = await this.prisma.eDVIRInspection.findUnique({
+      where: { id },
+      include: { asset: true },
+    });
+    if (!inspection) throw new NotFoundException('Inspection not found');
+
+    const updated = await this.prisma.eDVIRInspection.update({
+      where: { id },
+      data: {
+        mechanicSignOffBy: data.mechanicName,
+        mechanicNotes: data.notes || 'Defects corrected or repair unnecessary per 49 CFR 396.11',
+        mechanicSignOffAt: new Date(),
+      },
+      include: { asset: true, driver: { select: { id: true, name: true, email: true } } },
+    });
+
+    if (data.clearInoperable && inspection.asset.status === AssetStatus.INOPERABLE) {
+      await this.prisma.asset.update({
+        where: { id: inspection.assetId },
+        data: { status: AssetStatus.OPERABLE },
+      });
+
+      await this.auditService.logChange({
+        userId,
+        action: 'UPDATE',
+        entityName: 'Asset',
+        entityId: inspection.assetId,
+        beforeState: { status: AssetStatus.INOPERABLE },
+        afterState: { status: AssetStatus.OPERABLE, mechanicSignOff: data.mechanicName },
+      });
+    }
+
+    return {
+      ...updated,
+      checklistJson: JSON.parse(updated.checklistJson),
+    };
+  }
+
+  async nextDriverReview(id: string, data: { driverName: string }, userId?: string) {
+    const inspection = await this.prisma.eDVIRInspection.findUnique({
+      where: { id },
+    });
+    if (!inspection) throw new NotFoundException('Inspection not found');
+
+    const updated = await this.prisma.eDVIRInspection.update({
+      where: { id },
+      data: {
+        nextDriverReviewBy: data.driverName,
+        nextDriverReviewAt: new Date(),
+      },
+      include: { asset: true, driver: { select: { id: true, name: true, email: true } } },
+    });
+
+    return {
+      ...updated,
+      checklistJson: JSON.parse(updated.checklistJson),
+    };
+  }
 }
