@@ -85,6 +85,17 @@ export class RenewalsController {
   }
 
   /**
+   * Searchable component list for Equipment compliance items
+   */
+  @Get('lookup/components')
+  @ApiOperation({ summary: 'Search components', description: 'Search fleet components (Engine, Brakes, Tyres...) with their parent truck/trailer.' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiResponse({ status: 200, description: 'Component list returned.' })
+  async lookupComponents(@Query('search') search?: string) {
+    return this.renewalsService.lookupComponents(search);
+  }
+
+  /**
    * Summary counts across all 33 items for KPI indicators
    */
   @Get('summary')

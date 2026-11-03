@@ -88,14 +88,96 @@ export class RenewalsService {
 
     return items.map((item: any) => {
       const { daysLeft, urgency } = this.calcUrgency(item.expiryDate);
+      const meta = this.parseMeta(item.metadataJson);
       return {
         ...item,
         daysLeft,
         urgency,
-        driverName: item.driver?.name || null,
-        assetName: item.asset?.name || null,
+        // Drivers selected from the SuperTruck carrier DB are kept in metadata (no local User FK)
+        driverId: item.driverId || meta.driverRef?.id || null,
+        driverName: item.driver?.name || meta.driverRef?.name || null,
+        assetName: item.asset?.name || meta.componentRef?.assetName || null,
+        componentId: meta.componentRef?.id || null,
+        componentName: meta.componentRef?.name || null,
+        carrierId: meta.carrierRef?.id || null,
+        carrierName: meta.carrierRef?.name || null,
+        dotNumber: meta.carrierRef?.dotNumber || null,
       };
     });
+  }
+
+  private parseMeta(json?: string | null): any {
+    if (!json) return {};
+    try {
+      const parsed = JSON.parse(json);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * Only keep driverId / assetId when they exist locally, so external
+   * (SuperTruck carrier DB) IDs never violate the fleet DB foreign keys.
+   */
+  private async resolveLocalRefs(dto: SaveRenewalDto): Promise<{ driverId: string | null; assetId: string | null }> {
+    let driverId: string | null = null;
+    let assetId: string | null = null;
+    if (dto.driverId) {
+      const u = await this.prisma.user.findUnique({ where: { id: dto.driverId }, select: { id: true } });
+      driverId = u ? u.id : null;
+    }
+    if (dto.assetId) {
+      const a = await this.prisma.asset.findUnique({ where: { id: dto.assetId }, select: { id: true } });
+      assetId = a ? a.id : null;
+    }
+    return { driverId, assetId };
+  }
+
+  /**
+   * If the driver comes from the SuperTruck carrier DB (not a local User),
+   * keep its id in metadata so the record stays linked to that driver.
+   */
+  private withExternalDriverRef(dto: SaveRenewalDto, localDriverId: string | null): string | null {
+    if (!dto.driverId || localDriverId) return dto.metadataJson || null;
+    const meta = this.parseMeta(dto.metadataJson);
+    if (meta.driverRef?.id !== dto.driverId) {
+      meta.driverRef = { id: dto.driverId, name: meta.driverRef?.name || null };
+    }
+    return JSON.stringify(meta);
+  }
+
+  /**
+   * Searchable component lookup (Engine, Brakes, Tyres...) with parent unit
+   */
+  async lookupComponents(search?: string) {
+    const term = search?.trim();
+    const where: any = term
+      ? {
+          OR: [
+            { name: { contains: term } },
+            { asset: { name: { contains: term } } },
+            { asset: { vin: { contains: term } } },
+            { asset: { plateNumber: { contains: term } } },
+          ],
+        }
+      : {};
+    const comps = await this.prisma.component.findMany({
+      where,
+      include: { asset: { select: { id: true, name: true, type: true, vin: true, plateNumber: true } } },
+      orderBy: [{ name: 'asc' }],
+      take: 50,
+    });
+    return comps.map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      status: c.status,
+      assetId: c.assetId,
+      assetName: c.asset?.name || null,
+      assetType: c.asset?.type || null,
+      vin: c.asset?.vin || null,
+      plateNumber: c.asset?.plateNumber || null,
+    }));
   }
 
   /**
@@ -135,6 +217,8 @@ export class RenewalsService {
     const expiry = dto.expiryDate ? new Date(dto.expiryDate) : null;
     const issue = dto.issueDate ? new Date(dto.issueDate) : null;
     const lastRec = dto.lastRecordedDate ? new Date(dto.lastRecordedDate) : null;
+    const refs = await this.resolveLocalRefs(dto);
+    const metadataJson = this.withExternalDriverRef(dto, refs.driverId);
 
     if (isEdit && dto.id) {
       const existing = await (this.prisma as any).complianceRenewal.findUnique({ where: { id: dto.id } });
@@ -147,8 +231,8 @@ export class RenewalsService {
           type: dto.type,
           title: dto.title,
           description: dto.description || null,
-          driverId: dto.driverId || null,
-          assetId: dto.assetId || null,
+          driverId: refs.driverId,
+          assetId: refs.assetId,
           issueDate: issue,
           expiryDate: expiry,
           alertLeadDays: dto.alertLeadDays ?? 30,
@@ -157,7 +241,7 @@ export class RenewalsService {
           referenceNumber: dto.referenceNumber || null,
           documentUrl: dto.documentUrl || existing.documentUrl,
           notes: dto.notes || null,
-          metadataJson: dto.metadataJson || null,
+          metadataJson,
           lastModifiedById: user.id,
           lastModifiedByName: user.name,
           lastModifiedByRole: user.role,
@@ -177,8 +261,8 @@ export class RenewalsService {
         type: dto.type,
         title: dto.title,
         description: dto.description || null,
-        driverId: dto.driverId || null,
-        assetId: dto.assetId || null,
+        driverId: refs.driverId,
+        assetId: refs.assetId,
         issueDate: issue,
         expiryDate: expiry,
         alertLeadDays: dto.alertLeadDays ?? 30,
@@ -187,7 +271,7 @@ export class RenewalsService {
         referenceNumber: dto.referenceNumber || null,
         documentUrl: dto.documentUrl || null,
         notes: dto.notes || null,
-        metadataJson: dto.metadataJson || null,
+        metadataJson,
         enteredById: user.id,
         enteredByName: user.name,
         enteredByRole: user.role,
