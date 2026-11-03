@@ -90,9 +90,21 @@ export class RenewalsController {
   @Get('lookup/components')
   @ApiOperation({ summary: 'Search components', description: 'Search fleet components (Engine, Brakes, Tyres...) with their parent truck/trailer.' })
   @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'assetId', required: false, description: 'Only components of this truck/trailer' })
   @ApiResponse({ status: 200, description: 'Component list returned.' })
-  async lookupComponents(@Query('search') search?: string) {
-    return this.renewalsService.lookupComponents(search);
+  async lookupComponents(@Query('search') search?: string, @Query('assetId') assetId?: string) {
+    return this.renewalsService.lookupComponents(search, assetId);
+  }
+
+  /**
+   * Searchable truck/trailer list (step 1 of Equipment compliance form)
+   */
+  @Get('lookup/assets')
+  @ApiOperation({ summary: 'Search trucks and trailers', description: 'Search fleet units by name, VIN or plate.' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiResponse({ status: 200, description: 'Asset list returned.' })
+  async lookupAssets(@Query('search') search?: string) {
+    return this.renewalsService.lookupAssets(search);
   }
 
   /**

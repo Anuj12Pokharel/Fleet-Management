@@ -78,6 +78,29 @@ export class RenewalsService {
   }
 
   /**
+   * Mileage-based urgency (PM service): miles remaining until targetMileage vs the unit's odometer.
+   */
+  calcMileageUrgency(
+    targetMileage: number | null | undefined,
+    odometer: number | null | undefined,
+    alertLeadMiles = 1500,
+  ): { mileageLeft: number | null; urgency: 'CRITICAL' | 'WARNING' | 'INFO' | 'OK' | 'NO_EXPIRY' } {
+    if (!targetMileage || odometer === null || odometer === undefined) {
+      return { mileageLeft: null, urgency: 'NO_EXPIRY' };
+    }
+    const mileageLeft = Math.round(targetMileage - odometer);
+    if (mileageLeft <= 500) return { mileageLeft, urgency: 'CRITICAL' };
+    if (mileageLeft <= alertLeadMiles) return { mileageLeft, urgency: 'WARNING' };
+    return { mileageLeft, urgency: 'OK' };
+  }
+
+  /** Most severe of several urgency levels (NO_EXPIRY ranks lowest). */
+  private worstUrgency(...levels: string[]): 'CRITICAL' | 'WARNING' | 'INFO' | 'OK' | 'NO_EXPIRY' {
+    const rank: Record<string, number> = { CRITICAL: 4, WARNING: 3, INFO: 2, OK: 1, NO_EXPIRY: 0 };
+    return levels.reduce((a, b) => (rank[b] > rank[a] ? b : a)) as any;
+  }
+
+  /**
    * Get all renewals with filtering, urgency calculation, and entity joins
    */
   async findAll(filters: {
@@ -113,7 +136,7 @@ export class RenewalsService {
       where,
       include: {
         driver: { select: { id: true, name: true, email: true, role: true } },
-        asset: { select: { id: true, name: true, plateNumber: true, vin: true, type: true } },
+        asset: { select: { id: true, name: true, plateNumber: true, vin: true, type: true, odometer: true } },
       },
       orderBy: [
         { expiryDate: 'asc' },
@@ -122,16 +145,26 @@ export class RenewalsService {
     });
 
     return items.map((item: any) => {
-      const { daysLeft, urgency } = this.calcUrgency(item.expiryDate);
+      const { daysLeft, urgency: dateUrgency } = this.calcUrgency(item.expiryDate);
       const meta = this.parseMeta(item.metadataJson);
+      const currentOdometer: number | null = item.asset?.odometer ?? null;
+      const leadMiles = Number(meta.details?.alertLeadMiles) || 1500;
+      const { mileageLeft, urgency: mileageUrgency } = this.calcMileageUrgency(
+        item.targetMileage,
+        currentOdometer,
+        leadMiles,
+      );
+      const urgency = this.worstUrgency(dateUrgency, mileageUrgency);
       return {
         ...item,
         daysLeft,
         urgency,
+        currentOdometer,
+        mileageLeft,
         // Drivers selected from the SuperTruck carrier DB are kept in metadata (no local User FK)
         driverId: item.driverId || meta.driverRef?.id || null,
         driverName: item.driver?.name || meta.driverRef?.name || null,
-        assetName: item.asset?.name || meta.componentRef?.assetName || null,
+        assetName: item.asset?.name || meta.componentRef?.assetName || meta.assetRef?.name || null,
         componentId: meta.componentRef?.id || null,
         componentName: meta.componentRef?.name || null,
         carrierId: meta.carrierRef?.id || null,
@@ -183,9 +216,39 @@ export class RenewalsService {
   }
 
   /**
+   * Searchable truck/trailer lookup (first step of the Equipment form)
+   */
+  async lookupAssets(search?: string) {
+    const term = search?.trim();
+    const where: any = term
+      ? {
+          OR: [
+            { name: { contains: term } },
+            { vin: { contains: term } },
+            { plateNumber: { contains: term } },
+          ],
+        }
+      : {};
+    const assets = await this.prisma.asset.findMany({
+      where,
+      select: { id: true, name: true, type: true, vin: true, plateNumber: true, odometer: true },
+      orderBy: [{ name: 'asc' }],
+      take: 50,
+    });
+    return assets.map((a: any) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      vin: a.vin || null,
+      plateNumber: a.plateNumber || null,
+      odometer: a.odometer ?? null,
+    }));
+  }
+
+  /**
    * Searchable component lookup (Engine, Brakes, Tyres...) with parent unit
    */
-  async lookupComponents(search?: string) {
+  async lookupComponents(search?: string, assetId?: string) {
     const term = search?.trim();
     const where: any = term
       ? {
@@ -197,6 +260,8 @@ export class RenewalsService {
           ],
         }
       : {};
+    // Restrict to the components of one truck/trailer
+    if (assetId) where.assetId = assetId;
     const comps = await this.prisma.component.findMany({
       where,
       include: { asset: { select: { id: true, name: true, type: true, vin: true, plateNumber: true } } },
