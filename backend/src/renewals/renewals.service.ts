@@ -1,24 +1,59 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { IsOptional, IsString, IsNumber, IsEnum } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ComplianceScope, VerificationStatus, Role } from '../enums';
 
 export class SaveRenewalDto {
+  @IsOptional() @IsString()
   id?: string;
+
+  @IsOptional() @IsString()
   scope?: 'DRIVER' | 'EQUIPMENT' | 'CARRIER';
+
+  @IsOptional() @IsString()
   type?: string;
+
+  @IsOptional() @IsString()
   title?: string;
+
+  @IsOptional() @IsString()
   description?: string;
+
+  @IsOptional() @IsString()
   driverId?: string;
+
+  @IsOptional() @IsString()
   assetId?: string;
-  issueDate?: string | Date;
-  expiryDate?: string | Date | null;
+
+  @IsOptional() @IsString()
+  issueDate?: string;
+
+  @IsOptional() @IsString()
+  expiryDate?: string | null;
+
+  @IsOptional() @Type(() => Number) @IsNumber()
   alertLeadDays?: number;
+
+  @IsOptional() @Type(() => Number) @IsNumber()
   targetMileage?: number;
-  lastRecordedDate?: string | Date;
+
+  @IsOptional() @IsString()
+  lastRecordedDate?: string;
+
+  @IsOptional() @IsString()
   referenceNumber?: string;
+
+  @IsOptional() @IsString()
   documentUrl?: string;
+
+  @IsOptional() @IsString()
   notes?: string;
+
+  @IsOptional() @IsString()
   metadataJson?: string;
+
+  @IsOptional() @IsString()
   verificationStatus?: string;
 }
 
@@ -213,10 +248,15 @@ export class RenewalsService {
    * Fleet Manager Master Save (Add or Edit ANY item across Driver, Equipment, Carrier)
    */
   async masterSave(user: any, dto: SaveRenewalDto) {
+    // Validate required fields
+    if (!dto.scope) throw new BadRequestException('scope is required (DRIVER, EQUIPMENT, or CARRIER)');
+    if (!dto.type) throw new BadRequestException('type is required (e.g. DRIVER_CDL)');
+    if (!dto.title) throw new BadRequestException('title is required');
+
     const isEdit = Boolean(dto.id);
-    const expiry = dto.expiryDate ? new Date(dto.expiryDate) : null;
-    const issue = dto.issueDate ? new Date(dto.issueDate) : null;
-    const lastRec = dto.lastRecordedDate ? new Date(dto.lastRecordedDate) : null;
+    const expiry = dto.expiryDate ? new Date(dto.expiryDate as string) : null;
+    const issue = dto.issueDate ? new Date(dto.issueDate as string) : null;
+    const lastRec = dto.lastRecordedDate ? new Date(dto.lastRecordedDate as string) : null;
     const refs = await this.resolveLocalRefs(dto);
     const metadataJson = this.withExternalDriverRef(dto, refs.driverId);
 
