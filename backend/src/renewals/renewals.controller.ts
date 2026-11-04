@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { PrismaService } from '../prisma.service';
-import { RenewalsService, SaveRenewalDto } from './renewals.service';
+import { RenewalsService, SaveRenewalDto, SaveBulkRenewalDto } from './renewals.service';
 import { ZitadelRenewalAuthGuard } from './zitadel-renewal-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -126,6 +126,17 @@ export class RenewalsController {
   @ApiResponse({ status: 200, description: 'Renewal record saved and verified.' })
   async masterSave(@Request() req: any, @Body() body: SaveRenewalDto) {
     return this.renewalsService.masterSave(req.user, body);
+  }
+
+  /**
+   * Bulk create: one record per selected checklist item (all-or-nothing)
+   */
+  @Roles(Role.MAINTENANCE_ADMIN, Role.FLEET_MANAGER)
+  @Post('admin/save-bulk')
+  @ApiOperation({ summary: 'Bulk save compliance items', description: 'Creates one compliance record per selected checklist item in a single transaction. Items already on file for the same subject are skipped unless addAnyway is set.' })
+  @ApiResponse({ status: 200, description: 'Records created; duplicates reported as skipped.' })
+  async saveBulk(@Request() req: any, @Body() body: SaveBulkRenewalDto) {
+    return this.renewalsService.saveBulk(req.user, body);
   }
 
   /**

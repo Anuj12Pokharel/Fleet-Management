@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { IsOptional, IsString, IsNumber, IsEnum } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsEnum, IsArray, IsBoolean, ArrayMinSize, ArrayMaxSize, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ComplianceScope, VerificationStatus, Role } from '../enums';
 
@@ -55,6 +55,18 @@ export class SaveRenewalDto {
 
   @IsOptional() @IsString()
   verificationStatus?: string;
+}
+
+export class SaveBulkRenewalItemDto extends SaveRenewalDto {
+  /** Create even if the same item already exists for this subject */
+  @IsOptional() @IsBoolean()
+  addAnyway?: boolean;
+}
+
+export class SaveBulkRenewalDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(50)
+  @ValidateNested({ each: true }) @Type(() => SaveBulkRenewalItemDto)
+  items: SaveBulkRenewalItemDto[];
 }
 
 @Injectable()
@@ -387,6 +399,89 @@ export class RenewalsService {
       },
       include: { driver: true, asset: true },
     });
+  }
+
+  /** Identifies who/what a record belongs to, so duplicates can be detected. */
+  private subjectKey(scope: string | undefined, driverId: any, assetId: any, meta: any): string {
+    if (scope === 'DRIVER') return `D:${driverId || meta?.driverRef?.id || ''}`;
+    if (scope === 'EQUIPMENT') {
+      return `E:${assetId || meta?.assetRef?.id || meta?.componentRef?.assetId || ''}:${meta?.componentRef?.id || ''}`;
+    }
+    return `C:${meta?.carrierRef?.id || ''}`;
+  }
+
+  /**
+   * Bulk create: one record per ticked checklist item, all-or-nothing.
+   * Items that already exist for the same subject are skipped (unless addAnyway).
+   */
+  async saveBulk(user: any, dto: SaveBulkRenewalDto) {
+    if (!dto?.items?.length) throw new BadRequestException('Select at least one compliance item.');
+
+    const errors: string[] = [];
+    dto.items.forEach((it, i) => {
+      const label = it.title || it.type || `Item ${i + 1}`;
+      if (!it.scope) errors.push(`${label}: scope is required`);
+      if (!it.type) errors.push(`${label}: type is required`);
+      if (!it.title) errors.push(`${label}: title is required`);
+    });
+    if (errors.length) throw new BadRequestException(errors);
+
+    // Existing records for the same scope+type, to detect duplicates
+    const existing = await (this.prisma as any).complianceRenewal.findMany({
+      where: { type: { in: dto.items.map((i) => i.type) }, status: 'ACTIVE' },
+      select: { scope: true, type: true, driverId: true, assetId: true, metadataJson: true },
+    });
+    const existingKeys = new Set<string>(
+      existing.map((r: any) => `${r.type}|${this.subjectKey(r.scope, r.driverId, r.assetId, this.parseMeta(r.metadataJson))}`),
+    );
+
+    const skipped: { type: string; title: string; reason: string }[] = [];
+    const toCreate: any[] = [];
+    const seen = new Set<string>();
+
+    for (const it of dto.items) {
+      const refs = await this.resolveLocalRefs(it);
+      const metadataJson = this.withExternalDriverRef(it, refs.driverId);
+      const key = `${it.type}|${this.subjectKey(it.scope, refs.driverId || it.driverId, refs.assetId || it.assetId, this.parseMeta(metadataJson))}`;
+      if (!it.addAnyway && (existingKeys.has(key) || seen.has(key))) {
+        skipped.push({ type: it.type as string, title: it.title as string, reason: 'Already on file for this subject' });
+        continue;
+      }
+      seen.add(key);
+      toCreate.push({
+        scope: it.scope,
+        type: it.type,
+        title: it.title,
+        description: it.description || null,
+        driverId: refs.driverId,
+        assetId: refs.assetId,
+        issueDate: it.issueDate ? new Date(it.issueDate) : null,
+        expiryDate: it.expiryDate ? new Date(it.expiryDate as string) : null,
+        alertLeadDays: it.alertLeadDays ?? 30,
+        targetMileage: it.targetMileage ? Number(it.targetMileage) : null,
+        lastRecordedDate: it.lastRecordedDate ? new Date(it.lastRecordedDate) : null,
+        referenceNumber: it.referenceNumber || null,
+        documentUrl: it.documentUrl || null,
+        notes: it.notes || null,
+        metadataJson,
+        enteredById: user.id,
+        enteredByName: user.name,
+        enteredByRole: user.role,
+        verificationStatus: 'VERIFIED',
+        verifiedById: user.id,
+        verifiedByName: user.name,
+        verifiedAt: new Date(),
+      });
+    }
+
+    // Single transaction: either every selected item is saved or none
+    const created = toCreate.length
+      ? await (this.prisma as any).$transaction(
+          toCreate.map((data) => (this.prisma as any).complianceRenewal.create({ data })),
+        )
+      : [];
+
+    return { createdCount: created.length, skippedCount: skipped.length, created, skipped };
   }
 
   /**
