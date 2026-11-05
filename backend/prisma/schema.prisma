@@ -650,3 +650,99 @@ model Warranty {
 
 
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Repairs (carrier + driver workflow). Uses external ids (SuperTruck carrier DB /
+// Zitadel) as plain strings so no foreign keys to the local User/Asset tables.
+// ─────────────────────────────────────────────────────────────────────────────
+model Repair {
+  id               String    @id @default(uuid())
+  tenantId         String
+  carrierId        String?
+  carrierName      String?
+
+  // Unit
+  truckId          String?
+  truckName        String
+  truckPlate       String?
+  truckVin         String?
+  componentName    String?
+
+  // Driver
+  driverId         String?
+  driverName       String?
+  driverEmail      String?   // lower-case; lets a driver see repairs a carrier created for them
+
+  // Problem
+  title            String
+  description      String
+  category         String    @default("OTHER") // ENGINE, BRAKES, TIRES, ELECTRICAL, BODY, TRAILER, OTHER
+  priority         String    @default("MEDIUM") // LOW, MEDIUM, HIGH, EMERGENCY
+  source           String    @default("DRIVER") // DRIVER, CARRIER
+  canDrive         Boolean   @default(true)
+  odometer         Float?
+  gpsLatitude      Float?
+  gpsLongitude     Float?
+  mediaUrlsJson    String    @default("[]")
+
+  // Workflow
+  status           String    @default("SUBMITTED") // SUBMITTED, NEEDS_INFO, REJECTED, SCHEDULED, IN_PROGRESS, WAITING_PARTS, COMPLETED, VERIFIED, REOPENED, CLOSED, CANCELLED
+  rejectionReason  String?
+  scheduledAt      DateTime?
+  startedAt        DateTime?
+  dueAt            DateTime?
+  completedAt      DateTime?
+  closedAt         DateTime?
+
+  // Carrier-only: shop, costs, paperwork
+  repairType       String    @default("INTERNAL") // INTERNAL, EXTERNAL
+  vendorName       String?
+  vendorContact    String?
+  estimateAmount   Float?
+  laborCost        Float     @default(0)
+  partsCost        Float     @default(0)
+  otherCost        Float     @default(0)
+  totalCost        Float     @default(0)
+  partsJson        String    @default("[]")
+  poNumber         String?
+  invoiceUrl       String?
+  paymentStatus    String    @default("UNPAID") // UNPAID, PAID
+  paidAt           DateTime?
+  internalNotes    String?
+  cause            String?
+  workPerformed    String?
+
+  // Driver confirmation after the repair
+  driverResult     String?   // OK, NOT_FIXED
+  driverComment    String?
+  driverConfirmedAt DateTime?
+
+  createdById      String
+  createdByName    String
+  createdByRole    String    // CARRIER, DRIVER
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  events           RepairEvent[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([driverId])
+  @@index([truckId])
+}
+
+model RepairEvent {
+  id          String   @id @default(uuid())
+  repairId    String
+  repair      Repair   @relation(fields: [repairId], references: [id], onDelete: Cascade)
+  actorId     String
+  actorName   String
+  actorRole   String   // CARRIER, DRIVER
+  action      String   // CREATED, STATUS, COMMENT, UPDATED, PAYMENT, CONFIRMED
+  fromStatus  String?
+  toStatus    String?
+  note        String?
+  visibility  String   @default("PUBLIC") // PUBLIC (driver can see), INTERNAL (carrier only)
+  createdAt   DateTime @default(now())
+
+  @@index([repairId])
+}

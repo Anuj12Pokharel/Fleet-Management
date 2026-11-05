@@ -10,6 +10,8 @@ import { PmService } from './pm/pm.service';
 import { WorkordersService } from './workorders/workorders.service';
 import { RenewalsService } from './renewals/renewals.service';
 import { ZitadelRenewalAuthGuard } from './renewals/zitadel-renewal-auth.guard';
+import { RepairsController } from './repairs/repairs.controller';
+import { RepairsService } from './repairs/repairs.service';
 
 // Modules
 import { AuthModule } from './auth/auth.module';
@@ -66,6 +68,7 @@ import { ComplianceController } from './compliance/compliance.controller';
     PmController,
     WorkordersController,
     RenewalsController,
+    RepairsController,
     FuelController,
     DotController,
     VendorsController,
@@ -88,6 +91,7 @@ import { ComplianceController } from './compliance/compliance.controller';
     PmService,
     WorkordersService,
     RenewalsService,
+    RepairsService,
     ZitadelRenewalAuthGuard,
     RelayFuelService,
   ],

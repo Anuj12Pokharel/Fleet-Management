@@ -57,6 +57,7 @@ export class ZitadelRenewalAuthGuard implements CanActivate {
         email: 'system-service@supertruck.ai',
         name: 'SuperTruck Microservice M2M',
         role: Role.FLEET_MANAGER,
+        groups: ['carrier'],
         tenantId: request.headers['x-tenant-id'] || process.env.AUTH_ORG_ID || '357809423432876035',
       };
       return true;
@@ -214,6 +215,8 @@ export class ZitadelRenewalAuthGuard implements CanActivate {
       email,
       name,
       role: dbUser?.role ? (dbUser.role as Role) : resolvedRole,
+      // Zitadel groups (lower-case), used by modules that need a finer split than `role`
+      groups: lowerRoles,
       tenantId:
         request.headers['x-tenant-id'] ||
         verifiedPayload['urn:zitadel:iam:org:id'] ||
