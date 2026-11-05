@@ -428,7 +428,7 @@ export class RenewalsService {
 
     // Existing records for the same scope+type, to detect duplicates
     const existing = await (this.prisma as any).complianceRenewal.findMany({
-      where: { type: { in: dto.items.map((i) => i.type) }, status: 'ACTIVE' },
+      where: { type: { in: dto.items.map((i) => i.type) }, verificationStatus: { not: 'REJECTED' } },
       select: { scope: true, type: true, driverId: true, assetId: true, metadataJson: true },
     });
     const existingKeys = new Set<string>(
