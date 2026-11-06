@@ -53,6 +53,10 @@ export class SaveRenewalDto {
   @IsOptional() @IsString()
   metadataJson?: string;
 
+  /** When true (or when no metadata is sent) the incoming metadata is merged into the saved one instead of replacing it */
+  @IsOptional() @IsBoolean()
+  mergeMetadata?: boolean;
+
   @IsOptional() @IsString()
   verificationStatus?: string;
 }
@@ -175,6 +179,8 @@ export class RenewalsService {
         mileageLeft,
         // Drivers selected from the SuperTruck carrier DB are kept in metadata (no local User FK)
         driverId: item.driverId || meta.driverRef?.id || null,
+        // Units chosen from the carrier DB are not in the local Asset table, so keep their id in metadata
+        assetId: item.assetId || meta.assetRef?.id || meta.componentRef?.assetId || null,
         driverName: item.driver?.name || meta.driverRef?.name || null,
         assetName: item.asset?.name || meta.componentRef?.assetName || meta.assetRef?.name || null,
         componentId: meta.componentRef?.id || null,
@@ -184,6 +190,27 @@ export class RenewalsService {
         dotNumber: meta.carrierRef?.dotNumber || null,
       };
     });
+  }
+
+  /**
+   * Merge incoming metadata into what is already stored, so a partial save (for example from the
+   * per-driver checklist sheet) never wipes type-specific details, the carrier link or file names.
+   * Null/undefined values in the incoming data never overwrite stored ones.
+   */
+  private mergeMeta(existingJson?: string | null, incomingJson?: string | null): string | null {
+    const base = this.parseMeta(existingJson);
+    const inc = this.parseMeta(incomingJson);
+    const out: any = { ...base };
+    for (const [k, v] of Object.entries(inc)) {
+      if (v === null || v === undefined) continue;
+      if (typeof v === 'object' && !Array.isArray(v) && base[k] && typeof base[k] === 'object') {
+        const clean = Object.fromEntries(Object.entries(v as any).filter(([, x]) => x !== null && x !== undefined));
+        out[k] = { ...base[k], ...clean };
+      } else {
+        out[k] = v;
+      }
+    }
+    return Object.keys(out).length ? JSON.stringify(out) : null;
   }
 
   private parseMeta(json?: string | null): any {
@@ -341,6 +368,10 @@ export class RenewalsService {
       const existing = await (this.prisma as any).complianceRenewal.findUnique({ where: { id: dto.id } });
       if (!existing) throw new NotFoundException('Renewal record not found');
 
+      // Partial saves must not erase stored details; a full save from the edit form replaces them
+      const savedMetadata =
+        dto.mergeMetadata || !dto.metadataJson ? this.mergeMeta(existing.metadataJson, metadataJson) : metadataJson;
+
       return (this.prisma as any).complianceRenewal.update({
         where: { id: dto.id },
         data: {
@@ -358,7 +389,7 @@ export class RenewalsService {
           referenceNumber: dto.referenceNumber || null,
           documentUrl: dto.documentUrl || existing.documentUrl,
           notes: dto.notes || null,
-          metadataJson,
+          metadataJson: savedMetadata,
           lastModifiedById: user.id,
           lastModifiedByName: user.name,
           lastModifiedByRole: user.role,
